@@ -57,20 +57,32 @@ pip install -r backend/requirements.txt
 # 2. Postgres
 docker compose up -d
 
-# 3. Capture a snapshot (needs 2+ snapshots on different days before ML code will run)
+# 3. Env file (optional — config.py defaults already match docker-compose)
+cp .env.example .env
+
+# 4. Schema — either works on a fresh DB:
 cd backend
+PYTHONPATH=. alembic upgrade head
+# (daily_capture.py also calls Base.metadata.create_all() at startup as a
+# fallback, so step 4 isn't strictly required, but alembic is the intended
+# path for any future schema change)
+
+# 5. Tests
+PYTHONPATH=. pytest -v
+
+# 6. Capture a snapshot (needs 2+ snapshots on different days before ML code will run)
 PYTHONPATH=. python3 scripts/daily_capture.py
 
-# 4. API
+# 7. API
 PYTHONPATH=. uvicorn app.main:app --reload --port 8000
 
-# 5. Frontend (separate terminal)
+# 8. Frontend (separate terminal)
 cd ../frontend
 npm install
 npm run dev   # http://localhost:3000
 ```
 
-Config defaults in `backend/app/config.py` already match `docker-compose.yml` (`vol_user`/`vol_pass`/`vol_surface` on `localhost:5432`) — no `.env` file is required to run locally. See `.env.example` for the overridable variables (ticker, rate ticker, liquidity thresholds).
+Config defaults in `backend/app/config.py` already match `docker-compose.yml` (`vol_user`/`vol_pass`/`vol_surface` on `localhost:5432`) — no `.env` file is required to run locally. `config.py` loads `.env` from the repo root via `python-dotenv` if one exists; see `.env.example` for the overridable variables (ticker, rate ticker, liquidity thresholds).
 
 ### Daily capture via cron
 
@@ -108,13 +120,19 @@ neural-vol-surface/
 │   │       └── routes.py            # GET /api/snapshots, GET /api/surface/{id}
 │   ├── scripts/
 │   │   └── daily_capture.py         # cron entrypoint
+│   ├── migrations/                  # alembic (env.py wired to app.db.models.Base)
+│   │   └── versions/                # one migration so far: initial schema
+│   ├── tests/                       # pytest, DB-backed tests use a dedicated TEST_XYZ ticker
 │   ├── logs/                        # daily_capture.log (persistent, gitignored)
+│   ├── alembic.ini
+│   ├── pytest.ini
 │   └── requirements.txt
 ├── frontend/
 │   ├── app/page.tsx                 # snapshot selector + surface viewer
 │   ├── components/VolSurfacePlot.tsx  # Plotly 3D surface, extrapolated cells at reduced opacity
 │   └── lib/{api,types}.ts
 ├── docker-compose.yml                # Postgres only
+├── .gitignore
 └── .env.example
 ```
 
@@ -124,7 +142,6 @@ neural-vol-surface/
 - **Model**: feedforward only, predicts the full next-day grid (not a residual/delta). No temporal architecture (LSTM/Transformer) until this baseline is validated against real accumulated data.
 - **Single ticker**: SPY only; `VOL_SURFACE_TICKER` is configurable but the pipeline hasn't been run against anything else.
 - **European BS on American options**: accepted approximation, see above — not corrected for early exercise.
-- **`alembic` and `python-dotenv` are in `requirements.txt` but not wired up**: schema is created via `Base.metadata.create_all()`, no migrations exist yet; environment variables are read through `os.getenv` defaults in `config.py`, not an actual `.env` loader. Fine for a single-developer local project, would need fixing before this touches a second environment.
-- **No automated tests**: `backend/tests/` exists but is empty. Correctness so far has been verified with targeted manual scripts run against real and synthetic data during development, not a test suite.
 - **Yahoo Finance is an unofficial API**: retry-with-backoff handles transient rate-limiting, but a sustained block would still lose a day of data — there's no secondary data source.
-- **Version control**: the repo root is not yet a git repository; `frontend/` has its own nested `.git` from `create-next-app`'s default init. Needs a single root-level `git init` (and removal of the nested one) before this is pushed anywhere.
+- **Test coverage is targeted, not exhaustive**: `pytest` covers Black-Scholes round-trips, surface grid construction/shape/no-NaN, explicit range overrides, and dataset pairing edge cases (`InsufficientSnapshotsError`, `n_snapshots` limiting) — 18 tests, all DB-backed tests run against the same local Postgres instance as the app itself (isolated via a dedicated `TEST_XYZ` ticker, cleaned up before/after each test), not a separate test database. No coverage yet for `options_fetcher.py`/`daily_capture.py` (would need mocking yfinance) or the FastAPI routes.
+- **`alembic`**: one initial migration exists, capturing the current schema (verified by applying it to an empty database). Future schema changes should go through `alembic revision --autogenerate` + `alembic upgrade head`; `Base.metadata.create_all()` is still called at startup as a convenience bootstrap for a from-scratch dev setup, which is redundant with alembic once the first migration exists — worth removing later.
