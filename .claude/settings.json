@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(curl -sD - -o /dev/null \"https://query1.finance.yahoo.com/v8/finance/chart/SPY?range=5d&interval=1d\")"
+    ]
+  }
+}
