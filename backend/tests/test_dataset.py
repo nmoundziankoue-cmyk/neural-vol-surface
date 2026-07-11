@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import torch
 
 from app.ml.dataset import InsufficientSnapshotsError, load_training_pairs
 from tests.factories import TEST_TICKER, make_snapshot, synthetic_points
@@ -27,6 +28,8 @@ def test_builds_one_pair_from_two_snapshots(db_session, clean_test_snapshots):
 
     assert dataset.X.shape == (1, 80)
     assert dataset.y.shape == (1, 80)
+    assert dataset.extrapolated_mask.shape == (1, 80)
+    assert dataset.extrapolated_mask.dtype == torch.bool
     assert len(dataset.snapshot_id_pairs) == 1
 
 

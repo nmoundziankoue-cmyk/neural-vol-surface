@@ -34,6 +34,7 @@ class InsufficientSnapshotsError(Exception):
 class VolSurfaceDataset:
     X: torch.Tensor  # (n_pairs, n_moneyness * n_tte) — day J, flattened
     y: torch.Tensor  # (n_pairs, n_moneyness * n_tte) — day J+1, flattened
+    extrapolated_mask: torch.Tensor  # (n_pairs, n_moneyness * n_tte) bool — day J+1's mask
     snapshot_id_pairs: list[tuple[int, int]]
     log_moneyness_grid: np.ndarray
     tte_grid: np.ndarray
@@ -106,11 +107,16 @@ def load_training_pairs(
 
         X_list = [g.iv_grid.flatten() for g in grids[:-1]]
         y_list = [g.iv_grid.flatten() for g in grids[1:]]
+        # Mask is keyed on the *target* (day J+1) grid: it tells us whether
+        # the ground truth we'd be scoring predictions against is real data
+        # or a clamp-extrapolated fill-in.
+        mask_list = [g.extrapolated_mask.flatten() for g in grids[1:]]
         id_pairs = [(snapshots[i].id, snapshots[i + 1].id) for i in range(len(snapshots) - 1)]
 
         return VolSurfaceDataset(
             X=torch.tensor(np.array(X_list), dtype=torch.float32),
             y=torch.tensor(np.array(y_list), dtype=torch.float32),
+            extrapolated_mask=torch.tensor(np.array(mask_list), dtype=torch.bool),
             snapshot_id_pairs=id_pairs,
             log_moneyness_grid=grids[0].log_moneyness_grid,
             tte_grid=grids[0].tte_grid,
