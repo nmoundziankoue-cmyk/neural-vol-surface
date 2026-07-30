@@ -8,14 +8,29 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 
+def _normalize_database_url(url: str) -> str:
+    """Render (and most managed Postgres providers) hand out
+    postgres://... or postgresql://..., but psycopg2 needs the
+    dialect+driver form SQLAlchemy expects."""
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg2://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg2://" + url[len("postgresql://"):]
+    return url
+
+
 class Settings:
     ticker: str = os.getenv("VOL_SURFACE_TICKER", "SPY")
     rate_ticker: str = os.getenv("VOL_SURFACE_RATE_TICKER", "^IRX")
 
-    database_url: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg2://vol_user:vol_pass@localhost:5432/vol_surface",
+    database_url: str = _normalize_database_url(
+        os.getenv(
+            "DATABASE_URL",
+            "postgresql+psycopg2://vol_user:vol_pass@localhost:5432/vol_surface",
+        )
     )
+
+    frontend_origin: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
     # liquidity filters applied before Black-Scholes inversion
     min_open_interest: int = int(os.getenv("MIN_OPEN_INTEREST", "1"))
