@@ -7,6 +7,7 @@ import VolSurfacePlot from "@/components/VolSurfacePlot";
 
 export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
+  const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [surface, setSurface] = useState<VolSurfaceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +19,8 @@ export default function Home() {
         setSnapshots(data);
         if (data.length > 0) setSelectedId(data[0].id);
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setSnapshotsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -35,26 +37,39 @@ export default function Home() {
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6">
       <h1 className="text-2xl font-semibold mb-4">Neural Volatility Surface — SPY</h1>
 
-      <div className="mb-4 flex items-center gap-3">
-        <label htmlFor="snapshot-select" className="text-sm text-neutral-400">
-          Snapshot :
-        </label>
-        <select
-          id="snapshot-select"
-          className="bg-neutral-900 border border-neutral-700 rounded px-3 py-1.5 text-sm"
-          value={selectedId ?? ""}
-          onChange={(e) => setSelectedId(Number(e.target.value))}
-        >
-          {snapshots.map((s) => (
-            <option key={s.id} value={s.id}>
-              #{s.id} — {new Date(s.captured_at).toLocaleString()} — spot {s.spot.toFixed(2)}
-            </option>
-          ))}
-        </select>
-      </div>
+      {!snapshotsLoaded && !error && (
+        <p className="text-neutral-400 mb-4">Chargement des snapshots...</p>
+      )}
+
+      {snapshotsLoaded && snapshots.length === 0 && !error && (
+        <p className="text-neutral-400 mb-4">
+          Aucun snapshot disponible pour le moment — le pipeline de capture tourne
+          quotidiennement après la clôture du marché (17h ET). Reviens un peu plus tard.
+        </p>
+      )}
+
+      {snapshots.length > 0 && (
+        <div className="mb-4 flex items-center gap-3">
+          <label htmlFor="snapshot-select" className="text-sm text-neutral-400">
+            Snapshot :
+          </label>
+          <select
+            id="snapshot-select"
+            className="bg-neutral-900 border border-neutral-700 rounded px-3 py-1.5 text-sm"
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(Number(e.target.value))}
+          >
+            {snapshots.map((s) => (
+              <option key={s.id} value={s.id}>
+                #{s.id} — {new Date(s.captured_at).toLocaleString()} — spot {s.spot.toFixed(2)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {error && <p className="text-red-400 mb-4">Erreur : {error}</p>}
-      {loading && <p className="text-neutral-400 mb-4">Chargement...</p>}
+      {loading && <p className="text-neutral-400 mb-4">Chargement de la surface...</p>}
 
       {surface && (
         <>
