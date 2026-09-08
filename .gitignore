@@ -12,7 +12,11 @@ __pycache__/
 
 # generated at runtime
 backend/logs/
-backend/models/
+backend/models/*
+# ...except the evaluation report, committed as a deploy seed so the
+# hosted /api/evaluation returns the honest panel on a fresh container.
+# Refresh it with `python scripts/evaluate.py` and redeploy.
+!backend/models/evaluation_SPY.json
 
 # --- Node / frontend ---
 node_modules/

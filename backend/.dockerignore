@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 tests/
 logs/
-models/
+models/*
+!models/evaluation_SPY.json
 .env
 *.log

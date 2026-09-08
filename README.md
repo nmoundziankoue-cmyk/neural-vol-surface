@@ -1,5 +1,13 @@
 # Neural Volatility Surface Forecaster — SPY
 
+**▶ Live demo: https://REPLACE-ME.vercel.app**
+&nbsp;·&nbsp; API: `https://REPLACE-ME.onrender.com` (`/api/evaluation`, `/api/data-quality`, `/api/surfaces/latest`)
+
+> Hosted on free tiers. The backend cold-starts after ~15 min idle — the
+> first request can take 30–60 s, so if the page loads empty, wait and
+> reload once. The managed Postgres on Render's free plan is deleted 90
+> days after creation.
+
 ## Research question
 
 > Can a lightweight neural model predict tomorrow's SPY implied-volatility
@@ -279,9 +287,21 @@ end-to-end (would need a yfinance mock).
 
 ## 11. Deployment
 
-- **Backend**: `backend/Dockerfile` (CPU-only torch), `render.yaml`
-  Blueprint = web service + managed Postgres. `entrypoint.sh` runs
-  `alembic upgrade head` then uvicorn.
+- **Backend** → Render, from `render.yaml` (Blueprint = Docker web
+  service + free managed Postgres). `backend/Dockerfile` is CPU-only
+  torch; `entrypoint.sh` runs `alembic upgrade head` then uvicorn on
+  `$PORT`. Env vars: `DATABASE_URL` (wired from the managed DB by the
+  Blueprint) and `FRONTEND_ORIGIN` (set to the Vercel URL after step 4,
+  else CORS blocks the browser). Health check: `/health`.
+- **Frontend** → Vercel, root directory `frontend/`, one env var
+  `NEXT_PUBLIC_API_BASE = https://<backend>.onrender.com` (baked at build
+  time — set it before the first build, redeploy if you change it).
+- **Seeding the hosted DB**: the managed Postgres starts empty. Load the
+  local snapshots once via the External connection string:
+  `pg_dump --data-only --no-owner -t snapshots -t vol_points -t data_quality_reports "$LOCAL_URL" | psql "$RENDER_EXTERNAL_URL"`.
+  `models/evaluation_SPY.json` is committed as a seed so `/api/evaluation`
+  renders immediately; refresh it with `python scripts/evaluate.py` +
+  redeploy.
 - **Daily capture**: `.github/workflows/daily_capture.yml`, two UTC cron
   triggers (21:00 and 22:00) so the capture lands at 17:00 ET year-round
   regardless of DST; the second run of the day is a harmless dedup no-op.

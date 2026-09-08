@@ -14,6 +14,10 @@ COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini .
 COPY scripts ./scripts
+# Seed evaluation report (only evaluation_SPY.json survives .dockerignore),
+# so /api/evaluation serves the honest panel before the first in-container
+# evaluate.py run. Regenerate + redeploy to refresh it.
+COPY models ./models
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

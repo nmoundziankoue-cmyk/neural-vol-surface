@@ -1,0 +1,53 @@
+{
+  "ticker": "SPY",
+  "generated_on": "2026-09-08",
+  "n_snapshots": 4,
+  "n_pairs": 3,
+  "grid": "40x40 (TTE x log-moneyness)",
+  "pairs": [
+    {
+      "snapshot_id_t": 1,
+      "snapshot_id_t1": 23,
+      "date_t": "2026-07-08",
+      "date_t1": "2026-07-11",
+      "calendar_gap_days": 3,
+      "is_next_trading_day": true,
+      "n_cells_scored": 925,
+      "persistence_rmse": 0.005706446245312691,
+      "model_rmse": 0.016653524711728096
+    },
+    {
+      "snapshot_id_t": 23,
+      "snapshot_id_t1": 54,
+      "date_t": "2026-07-11",
+      "date_t1": "2026-08-16",
+      "calendar_gap_days": 36,
+      "is_next_trading_day": false,
+      "n_cells_scored": 993,
+      "persistence_rmse": 0.01798878237605095,
+      "model_rmse": 0.01794167049229145
+    },
+    {
+      "snapshot_id_t": 54,
+      "snapshot_id_t1": 75,
+      "date_t": "2026-08-16",
+      "date_t1": "2026-09-07",
+      "calendar_gap_days": 22,
+      "is_next_trading_day": false,
+      "n_cells_scored": 958,
+      "persistence_rmse": 0.013324220664799213,
+      "model_rmse": 0.034920379519462585
+    }
+  ],
+  "persistence_rmse": 0.013466213829815388,
+  "model_rmse": 0.024628013372421265,
+  "relative_improvement": -0.8288743728317062,
+  "model_beats_persistence": false,
+  "statistically_significant": false,
+  "caveats": [
+    "Only 3 pair(s); need >= 20 next-trading-day pairs before any RMSE comparison is more than anecdote.",
+    "Some pairs span multi-day gaps, so persistence is being asked to hold over a weekend+ rather than one session: 2026-07-11->2026-08-16 (36d), 2026-08-16->2026-09-07 (22d)",
+    "Model RMSE is leave-one-pair-out cross-validated, but with 3 pair(s) each fold trains on only 2 pair(s) - the number is out-of-sample but has enormous variance and should not be read as a point estimate."
+  ],
+  "verdict": "On 3 pair(s), the model does not beat persistence (model masked RMSE 0.0246 vs persistence 0.0135, relative improvement -82.9%). This is NOT statistically meaningful: too few pairs, some spanning multi-day gaps, and each cross-validation fold trains on almost nothing. Treat it as a pipeline smoke test, not evidence about the model either way."
+}
