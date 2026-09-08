@@ -39,15 +39,26 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # Once the DATABASE_URL repo secret is set (to Render's *external*
-      # Postgres connection string), it's used and this job talks to the
-      # real production DB. Until then - and this is what today's manual
-      # test run exercises - it falls back to the disposable Postgres
-      # service container above, so the workflow is fully self-testable
-      # before Render exists. No edit needed here when that secret is added.
+      # If the DATABASE_URL repo secret is set (to Render's *external*
+      # Postgres connection string) the job writes to the real DB.
+      # Otherwise it falls back to the disposable service container above -
+      # which is fine for a manual `workflow_dispatch` self-test but USELESS
+      # on a schedule, because the container is destroyed when the job ends
+      # and the captured snapshot is silently lost. The "guard" step below
+      # turns that silent loss into a hard failure on scheduled runs.
       DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql+psycopg2://ci_user:ci_pass@localhost:5432/vol_surface_ci' }}
+      DATABASE_URL_SECRET_SET: ${{ secrets.DATABASE_URL != '' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Guard against discarding scheduled captures
+        if: github.event_name == 'schedule' && env.DATABASE_URL_SECRET_SET != 'true'
+        run: |
+          echo "::error::DATABASE_URL secret is not set. A scheduled capture would"
+          echo "::error::write to the ephemeral CI Postgres and be lost. Set the"
+          echo "::error::DATABASE_URL repo secret to a persistent Postgres"
+          echo "::error::(Render external connection string) - see README."
+          exit 1
 
       - uses: actions/setup-python@v5
         with:
@@ -62,6 +73,15 @@ jobs:
         id: capture
         working-directory: backend
         run: PYTHONPATH=. python3 scripts/daily_capture.py
+
+      - name: Report where data went
+        if: always()
+        run: |
+          if [ "${DATABASE_URL_SECRET_SET}" = "true" ]; then
+            echo "Persisted to the DATABASE_URL secret target." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ Ran against the ephemeral CI Postgres - nothing persisted (manual test run)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Job summary
         if: always()
