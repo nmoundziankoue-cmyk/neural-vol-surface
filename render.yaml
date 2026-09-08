@@ -1,9 +1,3 @@
-databases:
-  - name: neural-vol-surface-db
-    databaseName: vol_surface
-    user: vol_user
-    plan: free
-
 services:
   - type: web
     name: neural-vol-surface-backend
@@ -13,12 +7,17 @@ services:
     plan: free
     healthCheckPath: /health
     envVars:
+      # External Postgres (Neon free tier) - NOT a Render-managed database.
+      # Set this manually in the Render dashboard (web service -> Environment)
+      # right after the first deploy, using Neon's connection string, e.g.
+      #   postgresql://user:pass@ep-xxx-pooler.<region>.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+      # config.py::_normalize_database_url rewrites the scheme to
+      # postgresql+psycopg2:// and preserves the ?sslmode=require query that
+      # psycopg2 needs for Neon.
       - key: DATABASE_URL
-        fromDatabase:
-          name: neural-vol-surface-db
-          property: connectionString
-      # Placeholder until the Next.js frontend is deployed - update then
-      # (see README). CORS will reject the real frontend's origin until this
-      # is set correctly.
+        sync: false
+      # Set to the deployed frontend origin (the Vercel Production URL) once
+      # the frontend is live, else CORS rejects the browser. Harmless default
+      # until then.
       - key: FRONTEND_ORIGIN
         value: http://localhost:3000

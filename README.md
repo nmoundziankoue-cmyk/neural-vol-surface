@@ -3,10 +3,10 @@
 **▶ Live demo: https://REPLACE-ME.vercel.app**
 &nbsp;·&nbsp; API: `https://REPLACE-ME.onrender.com` (`/api/evaluation`, `/api/data-quality`, `/api/surfaces/latest`)
 
-> Hosted on free tiers. The backend cold-starts after ~15 min idle — the
-> first request can take 30–60 s, so if the page loads empty, wait and
-> reload once. The managed Postgres on Render's free plan is deleted 90
-> days after creation.
+> Hosted on free tiers (Render web service + Neon Postgres). The backend
+> cold-starts after ~15 min idle — the first request can take 30–60 s, so
+> if the page loads empty, wait and reload once. Neon also suspends an
+> idle database, adding a few seconds to the first query after a pause.
 
 ## Research question
 
@@ -287,18 +287,24 @@ end-to-end (would need a yfinance mock).
 
 ## 11. Deployment
 
+- **Database** → Neon (external free-tier Postgres). `render.yaml`
+  declares no managed database; the web service takes `DATABASE_URL` as a
+  manual env var (`sync: false`). `config.py::_normalize_database_url`
+  rewrites Neon's `postgresql://…?sslmode=require&channel_binding=require`
+  to the `postgresql+psycopg2://` form SQLAlchemy needs, query string
+  intact.
 - **Backend** → Render, from `render.yaml` (Blueprint = Docker web
-  service + free managed Postgres). `backend/Dockerfile` is CPU-only
-  torch; `entrypoint.sh` runs `alembic upgrade head` then uvicorn on
-  `$PORT`. Env vars: `DATABASE_URL` (wired from the managed DB by the
-  Blueprint) and `FRONTEND_ORIGIN` (set to the Vercel URL after step 4,
-  else CORS blocks the browser). Health check: `/health`.
+  service only). `backend/Dockerfile` is CPU-only torch; `entrypoint.sh`
+  runs `alembic upgrade head` then uvicorn on `$PORT`. Env vars, both set
+  by hand in the dashboard: `DATABASE_URL` (Neon connection string) and
+  `FRONTEND_ORIGIN` (the Vercel Production URL, else CORS blocks the
+  browser). Health check: `/health`.
 - **Frontend** → Vercel, root directory `frontend/`, one env var
   `NEXT_PUBLIC_API_BASE = https://<backend>.onrender.com` (baked at build
   time — set it before the first build, redeploy if you change it).
-- **Seeding the hosted DB**: the managed Postgres starts empty. Load the
-  local snapshots once via the External connection string:
-  `pg_dump --data-only --no-owner -t snapshots -t vol_points -t data_quality_reports "$LOCAL_URL" | psql "$RENDER_EXTERNAL_URL"`.
+- **Seeding the hosted DB**: Neon starts empty. After the backend's first
+  deploy has run `alembic upgrade head`, load the local snapshots once:
+  `pg_dump --data-only --no-owner -t snapshots -t vol_points -t data_quality_reports "$LOCAL_URL" | psql "$NEON_URL"`.
   `models/evaluation_SPY.json` is committed as a seed so `/api/evaluation`
   renders immediately; refresh it with `python scripts/evaluate.py` +
   redeploy.
@@ -306,11 +312,11 @@ end-to-end (would need a yfinance mock).
   triggers (21:00 and 22:00) so the capture lands at 17:00 ET year-round
   regardless of DST; the second run of the day is a harmless dedup no-op.
 
-  ⚠️ **The workflow needs a `DATABASE_URL` repo secret** pointing at a
-  persistent Postgres (Render's *external* connection string). Without
-  it, the job falls back to a disposable CI Postgres and the snapshot is
-  discarded when the container is torn down — which is exactly what
-  happened to ~20 "successful" scheduled runs before this was caught.
+  ⚠️ **The workflow needs a `DATABASE_URL` repo secret** pointing at the
+  same persistent Postgres the backend uses (the Neon connection string).
+  Without it, the job falls back to a disposable CI Postgres and the
+  snapshot is discarded when the container is torn down — which is exactly
+  what happened to ~20 "successful" scheduled runs before this was caught.
   Scheduled runs now **hard-fail** when the secret is missing instead of
   silently losing data; `workflow_dispatch` self-tests still use the
   ephemeral DB.
@@ -377,9 +383,9 @@ cd ../frontend && npm install && npm run dev   # http://localhost:3000
 - **yfinance is an unofficial API.** Retry/backoff covers transient rate
   limiting; a sustained block loses a day. No secondary source. Field
   units drift between library versions (the `q` bug).
-- **Render free tier**: the web service cold-starts after 15 min idle
-  (first request ~30–60 s); the free managed Postgres **expires 90 days
-  after creation** and must be recreated, which drops all snapshots.
+- **Free-tier hosting**: the Render web service cold-starts after 15 min
+  idle (first request ~30–60 s); the Neon free-tier database auto-suspends
+  when idle, adding a few seconds to the first query after a pause.
 - **Model is retrained inside the evaluation**, not loaded from a
   registry — fine at this scale, not a pattern to keep once training
   costs anything.
