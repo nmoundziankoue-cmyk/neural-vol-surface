@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -12,9 +13,18 @@ import yfinance as yf
 from app.config import settings
 from app.ingestion.retry import with_retry
 
+# Share the "daily_capture" logger so warnings land in the same file/console
+# handlers configured by scripts/daily_capture.py.
+logger = logging.getLogger("daily_capture")
+
 # Pause between successive per-expiry requests in fetch_raw_chain, to avoid
 # tripping Yahoo's rate limiter on chains with many expiries.
 INTER_REQUEST_DELAY_SECONDS = 1.5
+
+# No broad equity index pays a dividend yield above this. Used both to
+# range-check the final number and to disambiguate yfinance's unit drift
+# (see fetch_dividend_yield).
+DIVIDEND_YIELD_SANITY_MAX = 0.15  # 15%
 
 
 @dataclass
@@ -43,23 +53,59 @@ def fetch_risk_free_rate(rate_ticker: str = settings.rate_ticker) -> float:
     return float(hist["Close"].iloc[-1]) / 100.0
 
 
+def _sanity_check_yield(y: float, *, source: str) -> float:
+    """Clamp to a plausible range and log the source, so a bad upstream
+    value can't silently poison Black-Scholes (a wrong q shifts every
+    forward and inflates the inversion failure rate)."""
+    if not 0.0 <= y <= DIVIDEND_YIELD_SANITY_MAX:
+        logger.warning(
+            "dividend yield %.4f from %s outside [0, %.2f] - clamping",
+            y, source, DIVIDEND_YIELD_SANITY_MAX,
+        )
+        return min(max(y, 0.0), DIVIDEND_YIELD_SANITY_MAX)
+    logger.info("dividend yield %.4f (%.2f%%) from %s", y, y * 100.0, source)
+    return y
+
+
 def fetch_dividend_yield(ticker: str = settings.ticker) -> float:
-    """Trailing annualized dividend yield, decimal. Falls back to summing
-    the last 4 dividend payments / spot if `info` lacks the field."""
+    """Trailing ~12-month dividend yield as a decimal (e.g. 0.0098 for SPY).
+
+    Primary source: actual cash dividends paid over the trailing year
+    divided by spot. This is unit-unambiguous, unlike yfinance's `info`
+    fields whose scaling has drifted across library versions - the same
+    ~1% SPY yield has been returned as 0.0101, 1.01 AND 0.98. `info` is
+    only a fallback (used when dividend history is unavailable), and
+    every path is range-checked by _sanity_check_yield.
+    """
     tk = yf.Ticker(ticker)
 
-    info = with_retry(lambda: tk.info, label=f"fetch_dividend_yield.info({ticker})", validate=lambda d: bool(d))
-    y = info.get("dividendYield")
-    if y is not None:
-        # yfinance has changed units across versions (0.0101 vs 1.01); normalize to decimal.
-        return y / 100.0 if y > 1 else y
+    divs = with_retry(
+        lambda: tk.dividends,
+        label=f"fetch_dividend_yield.dividends({ticker})",
+        validate=lambda d: d is not None,
+    )
+    if divs is not None and not divs.empty:
+        cutoff = pd.Timestamp.now(tz=divs.index.tz) - pd.DateOffset(years=1)
+        trailing = float(divs[divs.index >= cutoff].sum())
+        if trailing > 0:
+            return _sanity_check_yield(trailing / fetch_spot(ticker), source="trailing dividends")
 
-    divs = with_retry(lambda: tk.dividends, label=f"fetch_dividend_yield.dividends({ticker})", validate=lambda d: d is not None)
-    if divs.empty:
-        return 0.0
-    trailing = divs.tail(4).sum()
-    spot = fetch_spot(ticker)
-    return float(trailing / spot)
+    info = with_retry(lambda: tk.info, label=f"fetch_dividend_yield.info({ticker})", validate=lambda d: bool(d))
+    for field in ("yield", "trailingAnnualDividendYield", "dividendYield"):
+        raw = info.get(field)
+        if raw is None or raw <= 0:
+            continue
+        return _sanity_check_yield(_normalize_info_yield(raw), source=f"info[{field}]")
+
+    logger.warning("dividend yield unavailable for %s - defaulting to 0.0", ticker)
+    return 0.0
+
+
+def _normalize_info_yield(raw: float) -> float:
+    """yfinance `info` yield fields have been seen in both decimal (0.0101)
+    and percent (1.01, 0.98) scaling for the same ~1% yield. Anything above
+    the sanity max cannot be a real decimal yield, so treat it as percent."""
+    return raw / 100.0 if raw > DIVIDEND_YIELD_SANITY_MAX else float(raw)
 
 
 def fetch_market_context(ticker: str = settings.ticker) -> MarketContext:
