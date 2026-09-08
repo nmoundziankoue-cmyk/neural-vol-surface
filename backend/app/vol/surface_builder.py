@@ -1,6 +1,12 @@
 """Build a dense (log-moneyness x TTE) implied vol surface from the
 scattered VolPoints of one snapshot, via separable PCHIP interpolation.
 
+Coordinates (see docs/IV_AND_COORDINATES.md):
+  * log-moneyness is SPOT moneyness k = ln(K / S), not forward ln(K / F)
+    and not delta. The k = 0 column is therefore struck at spot, ~(r-q)T
+    away from ATM-forward (< 1 grid cell at index tenors).
+  * TTE is ACT/365 calendar time to expiry.
+
 scipy has no scattered-data 2D PCHIP, so we use the standard two-pass
 construction:
   1. Per-expiry smile: PCHIP over log-moneyness, using only that expiry's

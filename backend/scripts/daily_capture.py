@@ -133,6 +133,8 @@ def build_vol_points(ctx, raw_chain) -> tuple[list[dict], RejectionBreakdown]:
                 mid=mid,
                 volume=row.volume,
                 open_interest=row.openInterest,
+                # SPOT log-moneyness ln(K/S), not forward ln(K/F) - see
+                # docs/IV_AND_COORDINATES.md for why and the size of the offset.
                 log_moneyness=log(row.strike / ctx.spot),
                 implied_vol=iv,
             )

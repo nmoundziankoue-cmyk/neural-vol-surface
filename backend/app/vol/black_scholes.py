@@ -1,9 +1,20 @@
 """Black-Scholes pricing (with continuous dividend yield) and implied
 volatility inversion from an observed mid price.
 
-Note: SPY options are American-style; this uses the European BS model as
-a standard approximation for surface construction. Bias is largest for
-deep ITM puts (early exercise premium) - acceptable for v1.
+Assumptions (see docs/IV_AND_COORDINATES.md for the full list, none of
+which is presented as exact):
+
+  * European BS applied to American-style SPY options. Early-exercise
+    premium is unpriced; bias is largest deep ITM and negligible for the
+    OTM wing the surface is built from.
+  * `r` is a single scalar (13-week T-bill, ^IRX) applied to every
+    maturity - no term structure.
+  * `q` is a continuous trailing-12-month realized dividend yield, not
+    the discrete ex-div schedule.
+  * The inverted price is the end-of-day bid/ask mid.
+
+There is no closed form for sigma given a price, so the inversion is a
+1-D Brent root find on bs_price(sigma) - mid_price.
 """
 
 from __future__ import annotations
