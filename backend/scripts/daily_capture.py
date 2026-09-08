@@ -220,6 +220,18 @@ def run(ticker: str = settings.ticker) -> int:
     except Exception:  # noqa: BLE001 - report is secondary to the snapshot
         logger.exception("failed to build/store data-quality report for snapshot id=%d", snapshot_id)
 
+    # Refresh the cached model-vs-persistence evaluation. Best-effort and
+    # last: with too few snapshots it just writes a report whose verdict
+    # says "not enough data".
+    try:
+        from app.ml.evaluate import build_evaluation_report, write_evaluation_report
+
+        eval_report = build_evaluation_report(ticker=ticker)
+        write_evaluation_report(eval_report, ticker=ticker)
+        logger.info("evaluation refreshed: %s", eval_report.verdict)
+    except Exception:  # noqa: BLE001 - evaluation is secondary to the snapshot
+        logger.exception("failed to refresh model-vs-persistence evaluation")
+
     return snapshot_id
 
 

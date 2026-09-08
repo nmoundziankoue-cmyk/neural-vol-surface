@@ -1,4 +1,9 @@
-import type { DataQualityRow, SnapshotSummary, VolSurfaceResponse } from "./types";
+import type {
+  DataQualityRow,
+  EvaluationResponse,
+  SnapshotSummary,
+  VolSurfaceResponse,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
 
@@ -17,5 +22,11 @@ export async function fetchSurface(id: number): Promise<VolSurfaceResponse> {
 export async function fetchDataQuality(): Promise<DataQualityRow[]> {
   const res = await fetch(`${API_BASE}/api/data-quality`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch data quality: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchEvaluation(): Promise<EvaluationResponse> {
+  const res = await fetch(`${API_BASE}/api/evaluation`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to fetch evaluation: ${res.status}`);
   return res.json();
 }

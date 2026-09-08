@@ -7,8 +7,10 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.models import DataQualityReport, Snapshot
 from app.db.session import SessionLocal
+from app.ml.evaluate import read_evaluation_report
 from app.vol.surface_builder import build_vol_surface
 
 router = APIRouter(prefix="/api")
@@ -133,6 +135,51 @@ def list_data_quality(session: Session = Depends(get_session)) -> list[DataQuali
         )
         for r, s in rows
     ]
+
+
+class PairEvalRow(BaseModel):
+    snapshot_id_t: int
+    snapshot_id_t1: int
+    date_t: str
+    date_t1: str
+    calendar_gap_days: int
+    is_next_trading_day: bool
+    n_cells_scored: int
+    persistence_rmse: float
+    model_rmse: float | None
+
+
+class EvaluationResponse(BaseModel):
+    available: bool
+    ticker: str | None = None
+    generated_on: str | None = None
+    n_snapshots: int | None = None
+    n_pairs: int | None = None
+    grid: str | None = None
+    pairs: list[PairEvalRow] = []
+    persistence_rmse: float | None = None
+    model_rmse: float | None = None
+    relative_improvement: float | None = None
+    model_beats_persistence: bool | None = None
+    statistically_significant: bool = False
+    caveats: list[str] = []
+    verdict: str = ""
+
+
+@router.get("/evaluation", response_model=EvaluationResponse)
+def get_evaluation() -> EvaluationResponse:
+    """Honest persistence-baseline comparison. The only baseline is
+    IV_hat(t+1) = IV(t); the model number is leave-one-pair-out
+    cross-validated. `statistically_significant` is a hard gate that is
+    currently always False - `caveats` and `verdict` say why. Recomputed
+    by scripts/evaluate.py (also at the end of each daily capture)."""
+    data = read_evaluation_report(settings.ticker)
+    if data is None:
+        return EvaluationResponse(
+            available=False,
+            verdict="No evaluation has been computed yet (run scripts/evaluate.py).",
+        )
+    return EvaluationResponse(available=True, **data)
 
 
 @router.get("/surface/{snapshot_id}", response_model=VolSurfaceResponse)

@@ -13,10 +13,14 @@ from app.db.models import Snapshot, VolPoint
 TEST_TICKER = "TEST_XYZ"
 
 
-def synthetic_points(spot: float = 100.0) -> list[dict]:
+def synthetic_points(spot: float = 100.0, iv_shift: float = 0.0) -> list[dict]:
     """3 expiries x 5 OTM strikes each (>= MIN_POINTS_PER_SLICE=2 per
     expiry), spanning both sides of spot so the surface has an actual
-    put/call skew to interpolate."""
+    put/call skew to interpolate.
+
+    `iv_shift` adds a constant to every IV - use it to make two otherwise
+    identical snapshots differ, so persistence RMSE between them is > 0.
+    """
     expiries = [("2026-08-01", 0.10), ("2026-09-01", 0.20), ("2026-12-01", 0.45)]
     quotes = [
         (80, "put", 0.30), (90, "put", 0.22), (100, "call", 0.18),
@@ -29,7 +33,7 @@ def synthetic_points(spot: float = 100.0) -> list[dict]:
                 dict(
                     expiry=expiry, tte=tte, strike=float(strike), option_type=option_type,
                     bid=1.0, ask=1.1, mid=1.05, volume=100, open_interest=100,
-                    log_moneyness=float(np.log(strike / spot)), implied_vol=iv,
+                    log_moneyness=float(np.log(strike / spot)), implied_vol=iv + iv_shift,
                 )
             )
     return points

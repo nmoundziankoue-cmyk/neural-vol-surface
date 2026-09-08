@@ -54,3 +54,32 @@ export interface DataQualityRow {
   n_cells_observed: number | null;
   n_cells_extrapolated: number | null;
 }
+
+export interface PairEvalRow {
+  snapshot_id_t: number;
+  snapshot_id_t1: number;
+  date_t: string;
+  date_t1: string;
+  calendar_gap_days: number;
+  is_next_trading_day: boolean;
+  n_cells_scored: number;
+  persistence_rmse: number;
+  model_rmse: number | null;
+}
+
+export interface EvaluationResponse {
+  available: boolean;
+  ticker: string | null;
+  generated_on: string | null;
+  n_snapshots: number | null;
+  n_pairs: number | null;
+  grid: string | null;
+  pairs: PairEvalRow[];
+  persistence_rmse: number | null;
+  model_rmse: number | null;
+  relative_improvement: number | null;
+  model_beats_persistence: boolean | null;
+  statistically_significant: boolean;
+  caveats: string[];
+  verdict: string;
+}

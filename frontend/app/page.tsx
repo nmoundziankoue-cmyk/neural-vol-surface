@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchDataQuality, fetchSnapshots, fetchSurface } from "@/lib/api";
-import type { DataQualityRow, SnapshotSummary, VolSurfaceResponse } from "@/lib/types";
+import { fetchDataQuality, fetchEvaluation, fetchSnapshots, fetchSurface } from "@/lib/api";
+import type {
+  DataQualityRow,
+  EvaluationResponse,
+  SnapshotSummary,
+  VolSurfaceResponse,
+} from "@/lib/types";
 import VolSurfacePlot from "@/components/VolSurfacePlot";
 import DataQualityTable from "@/components/DataQualityTable";
+import ModelEvaluation from "@/components/ModelEvaluation";
 
 export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
@@ -12,6 +18,7 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [surface, setSurface] = useState<VolSurfaceResponse | null>(null);
   const [dataQuality, setDataQuality] = useState<DataQualityRow[]>([]);
+  const [evaluation, setEvaluation] = useState<EvaluationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +26,9 @@ export default function Home() {
     fetchDataQuality()
       .then(setDataQuality)
       .catch(() => setDataQuality([]));
+    fetchEvaluation()
+      .then(setEvaluation)
+      .catch(() => setEvaluation(null));
   }, []);
 
   useEffect(() => {
@@ -90,6 +100,16 @@ export default function Home() {
           <VolSurfacePlot surface={surface} />
         </>
       )}
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold mb-1">Modèle vs persistence</h2>
+        <p className="text-neutral-400 text-sm mb-3">
+          Question : un modèle neuronal léger prédit-il la surface IV SPY du lendemain mieux que
+          l&apos;hypothèse de persistence (IV<sub>t+1</sub> = IV<sub>t</sub>) ? Unique baseline,
+          RMSE masquée, validation leave-one-pair-out.
+        </p>
+        <ModelEvaluation evaluation={evaluation} />
+      </section>
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold mb-1">Qualité des données</h2>
