@@ -41,3 +41,41 @@ def test_zero_tte_returns_none():
 def test_invalid_option_type_raises():
     with pytest.raises(ValueError):
         bs_price(100, 100, 1.0, 0.03, 0.01, 0.20, "straddle")
+
+
+# --- mathematical properties, not just "it runs" ---
+
+def test_put_call_parity():
+    """C - P = S e^{-qT} - K e^{-rT} for European options."""
+    from math import exp
+
+    s, k, t, r, q, sig = 745.0, 760.0, 0.5, 0.04, 0.012, 0.22
+    c = bs_price(s, k, t, r, q, sig, "call")
+    p = bs_price(s, k, t, r, q, sig, "put")
+    assert c - p == pytest.approx(s * exp(-q * t) - k * exp(-r * t), abs=1e-8)
+
+
+@pytest.mark.parametrize("option_type", ["call", "put"])
+def test_price_strictly_increasing_in_vol(option_type):
+    """Vega > 0: a higher sigma is a higher option value. This is exactly
+    what makes the Brent inversion well-posed."""
+    prices = [bs_price(100, 100, 1.0, 0.03, 0.01, sig, option_type) for sig in [0.05, 0.1, 0.2, 0.4, 0.8]]
+    assert all(b > a for a, b in zip(prices, prices[1:]))
+
+
+def test_call_price_within_no_arbitrage_bounds():
+    """max(S e^{-qT} - K e^{-rT}, 0) <= C <= S e^{-qT}."""
+    from math import exp
+
+    s, k, t, r, q, sig = 100.0, 90.0, 0.75, 0.03, 0.01, 0.3
+    c = bs_price(s, k, t, r, q, sig, "call")
+    lower = max(s * exp(-q * t) - k * exp(-r * t), 0.0)
+    assert lower <= c <= s * exp(-q * t) + 1e-9
+
+
+def test_inversion_recovers_sigma_across_moneyness():
+    true_sigma = 0.25
+    for strike in (600, 700, 745, 800, 900):
+        price = bs_price(745, strike, 0.5, 0.04, 0.01, true_sigma, "call" if strike >= 745 else "put")
+        recovered = implied_volatility(price, 745, strike, 0.5, 0.04, 0.01, "call" if strike >= 745 else "put")
+        assert recovered == pytest.approx(true_sigma, abs=1e-4)
