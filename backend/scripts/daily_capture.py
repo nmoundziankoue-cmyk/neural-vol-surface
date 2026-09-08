@@ -53,7 +53,12 @@ def _mid_price(bid: float, ask: float) -> float | None:
 
 
 def build_vol_points(ctx, raw_chain) -> list[dict]:
-    today = ctx.snapshot_ts.date()
+    # Trading day / days-to-expiry must be measured in exchange-local time
+    # (ET), not UTC: a capture that lands after ~20:00 ET is already the
+    # next calendar day in UTC, which would shorten every TTE by one day
+    # and mis-count DTE against MIN_DTE. _find_todays_snapshot already uses
+    # ET for its dedup check - this keeps the two consistent.
+    today = ctx.snapshot_ts.astimezone(MARKET_TZ).date()
     points: list[dict] = []
     skipped = {"otm_side": 0, "bad_quote": 0, "illiquid": 0, "wide_spread": 0, "no_root": 0, "short_dte": 0}
 
