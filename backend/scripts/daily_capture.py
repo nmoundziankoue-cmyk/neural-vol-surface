@@ -19,6 +19,7 @@ from math import log
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 from sqlalchemy import select
 
 from app.config import settings
@@ -27,6 +28,11 @@ from app.db.session import SessionLocal, init_db
 from app.ingestion.options_fetcher import fetch_market_context, fetch_raw_chain
 from app.ingestion.retry import FetchFailure
 from app.vol.black_scholes import implied_volatility
+from app.vol.quality import (
+    RejectionBreakdown,
+    build_data_quality_report,
+    upsert_data_quality_report,
+)
 
 MARKET_TZ = ZoneInfo("America/New_York")
 
@@ -46,13 +52,12 @@ _console_handler.setFormatter(_formatter)
 logger.addHandler(_console_handler)
 
 
-def _mid_price(bid: float, ask: float) -> float | None:
-    if bid <= 0 or ask <= 0 or ask < bid:
-        return None
-    return (bid + ask) / 2.0
+def build_vol_points(ctx, raw_chain) -> tuple[list[dict], RejectionBreakdown]:
+    """Filter the raw chain and invert Black-Scholes per surviving contract.
 
-
-def build_vol_points(ctx, raw_chain) -> list[dict]:
+    Returns the kept points plus a RejectionBreakdown in which every raw
+    contract is accounted for in exactly one bucket - no silent drops.
+    """
     # Trading day / days-to-expiry must be measured in exchange-local time
     # (ET), not UTC: a capture that lands after ~20:00 ET is already the
     # next calendar day in UTC, which would shorten every TTE by one day
@@ -60,38 +65,50 @@ def build_vol_points(ctx, raw_chain) -> list[dict]:
     # ET for its dedup check - this keeps the two consistent.
     today = ctx.snapshot_ts.astimezone(MARKET_TZ).date()
     points: list[dict] = []
-    skipped = {"otm_side": 0, "bad_quote": 0, "illiquid": 0, "wide_spread": 0, "no_root": 0, "short_dte": 0}
+    rej = RejectionBreakdown(n_contracts_raw=len(raw_chain))
 
     for row in raw_chain.itertuples(index=False):
         expiry_date = datetime.strptime(row.expiry, "%Y-%m-%d").date()
         dte = (expiry_date - today).days
         if dte < settings.min_dte:
-            skipped["short_dte"] += 1
+            rej.n_short_dte += 1
             continue
         tte = dte / 365.0
 
         # OTM-only convention: calls above spot, puts below spot (best-priced side)
         if row.option_type == "call" and row.strike < ctx.spot:
-            skipped["otm_side"] += 1
+            rej.n_otm_side += 1
             continue
         if row.option_type == "put" and row.strike > ctx.spot:
-            skipped["otm_side"] += 1
+            rej.n_otm_side += 1
             continue
 
-        mid = _mid_price(row.bid, row.ask)
-        if mid is None:
-            skipped["bad_quote"] += 1
+        # Quote validity, split into distinct reasons rather than one
+        # "bad quote" bucket. A NaN bid/ask must be caught here explicitly;
+        # left alone it flows through as mid=NaN and gets mis-attributed to
+        # an inversion failure downstream.
+        bid, ask = row.bid, row.ask
+        if pd.isna(bid) or pd.isna(ask):
+            rej.n_missing_price += 1
             continue
+        if bid <= 0 or ask <= 0:
+            rej.n_non_positive_bid += 1
+            continue
+        if ask < bid:
+            rej.n_crossed_market += 1
+            continue
+        mid = (bid + ask) / 2.0
 
         if row.openInterest < settings.min_open_interest:
-            skipped["illiquid"] += 1
+            rej.n_low_open_interest += 1
             continue
 
-        rel_spread = (row.ask - row.bid) / mid
+        rel_spread = (ask - bid) / mid
         if rel_spread > settings.max_relative_spread:
-            skipped["wide_spread"] += 1
+            rej.n_wide_spread += 1
             continue
 
+        rej.n_inversion_attempted += 1
         iv = implied_volatility(
             mid_price=mid,
             spot=ctx.spot,
@@ -102,7 +119,7 @@ def build_vol_points(ctx, raw_chain) -> list[dict]:
             option_type=row.option_type,
         )
         if iv is None:
-            skipped["no_root"] += 1
+            rej.n_inversion_failed += 1
             continue
 
         points.append(
@@ -111,8 +128,8 @@ def build_vol_points(ctx, raw_chain) -> list[dict]:
                 tte=tte,
                 strike=row.strike,
                 option_type=row.option_type,
-                bid=row.bid,
-                ask=row.ask,
+                bid=bid,
+                ask=ask,
                 mid=mid,
                 volume=row.volume,
                 open_interest=row.openInterest,
@@ -121,8 +138,17 @@ def build_vol_points(ctx, raw_chain) -> list[dict]:
             )
         )
 
-    logger.info("kept %d points, skipped: %s", len(points), skipped)
-    return points
+    rej.n_kept = len(points)
+    gap = rej.n_contracts_raw - rej.accounted()
+    logger.info(
+        "kept %d / %d contracts (inversion failure rate %s); breakdown: %s",
+        rej.n_kept, rej.n_contracts_raw,
+        f"{rej.inversion_failure_rate:.1%}" if rej.inversion_failure_rate is not None else "n/a",
+        rej.as_dict(),
+    )
+    if gap != 0:
+        logger.warning("contract accounting gap: %d contracts unaccounted for", gap)
+    return points, rej
 
 
 def _find_todays_snapshot(session, ticker: str) -> Snapshot | None:
@@ -157,7 +183,7 @@ def run(ticker: str = settings.ticker) -> int:
     raw_chain = fetch_raw_chain(ticker)
     logger.info("%d raw contracts across all expiries", len(raw_chain))
 
-    vol_points = build_vol_points(ctx, raw_chain)
+    vol_points, rejections = build_vol_points(ctx, raw_chain)
     if not vol_points:
         raise RuntimeError("No valid vol points produced — check liquidity filters / market hours")
 
@@ -177,6 +203,21 @@ def run(ticker: str = settings.ticker) -> int:
         snapshot_id = snapshot.id
 
     logger.info("stored snapshot id=%d with %d vol points", snapshot_id, len(vol_points))
+
+    # Persist the data-quality report in its own session so a failure here
+    # (e.g. a degenerate surface) never rolls back the snapshot itself.
+    try:
+        with SessionLocal() as session:
+            report = build_data_quality_report(session, snapshot_id, rejections=rejections)
+            upsert_data_quality_report(session, report)
+        logger.info(
+            "data-quality report stored for snapshot id=%d (%d/%d cells observed, inversion failure rate %s)",
+            snapshot_id, report.n_cells_observed or 0, report.n_grid_cells or 0,
+            f"{rejections.inversion_failure_rate:.1%}" if rejections.inversion_failure_rate is not None else "n/a",
+        )
+    except Exception:  # noqa: BLE001 - report is secondary to the snapshot
+        logger.exception("failed to build/store data-quality report for snapshot id=%d", snapshot_id)
+
     return snapshot_id
 
 

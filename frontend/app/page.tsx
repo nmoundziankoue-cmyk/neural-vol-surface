@@ -1,17 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchSnapshots, fetchSurface } from "@/lib/api";
-import type { SnapshotSummary, VolSurfaceResponse } from "@/lib/types";
+import { fetchDataQuality, fetchSnapshots, fetchSurface } from "@/lib/api";
+import type { DataQualityRow, SnapshotSummary, VolSurfaceResponse } from "@/lib/types";
 import VolSurfacePlot from "@/components/VolSurfacePlot";
+import DataQualityTable from "@/components/DataQualityTable";
 
 export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [surface, setSurface] = useState<VolSurfaceResponse | null>(null);
+  const [dataQuality, setDataQuality] = useState<DataQualityRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchDataQuality()
+      .then(setDataQuality)
+      .catch(() => setDataQuality([]));
+  }, []);
 
   useEffect(() => {
     fetchSnapshots()
@@ -82,6 +90,16 @@ export default function Home() {
           <VolSurfacePlot surface={surface} />
         </>
       )}
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold mb-1">Qualité des données</h2>
+        <p className="text-neutral-400 text-sm mb-3">
+          Par snapshot : combien de la chaîne d&apos;options brute survit au filtrage de liquidité
+          et à l&apos;inversion Black-Scholes, pourquoi le reste est écarté, et quelle part de la
+          surface reconstruite est réelle vs extrapolée par clamp.
+        </p>
+        <DataQualityTable rows={dataQuality} />
+      </section>
     </main>
   );
 }
