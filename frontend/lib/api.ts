@@ -14,8 +14,14 @@ export async function fetchSnapshots(): Promise<SnapshotSummary[]> {
 }
 
 export async function fetchSurface(id: number): Promise<VolSurfaceResponse> {
-  const res = await fetch(`${API_BASE}/api/surface/${id}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}/api/surfaces/by-id/${id}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch surface ${id}: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchLatestSurface(): Promise<VolSurfaceResponse> {
+  const res = await fetch(`${API_BASE}/api/surfaces/latest`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to fetch latest surface: ${res.status}`);
   return res.json();
 }
 
