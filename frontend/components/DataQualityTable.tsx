@@ -34,7 +34,7 @@ const isWeekendET = (iso: string) => {
 
 export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
   if (rows.length === 0) {
-    return <p className="text-neutral-400">Aucun rapport de qualité de données pour le moment.</p>;
+    return <p className="text-neutral-400">No data-quality report yet.</p>;
   }
 
   const anyBackfilled = rows.some((r) => r.backfilled);
@@ -46,24 +46,24 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
         <thead>
           <tr className="text-neutral-400 text-left border-b border-neutral-700">
             <th className="py-2 pr-4">Snapshot</th>
-            <th className="py-2 pr-4" title="date de séance en heure de New York (ET)">Date (ET)</th>
+            <th className="py-2 pr-4" title="trading-session date in New York time (ET)">Date (ET)</th>
             <th className="py-2 pr-4">Spot</th>
-            <th className="py-2 pr-4">Contrats bruts</th>
-            <th className="py-2 pr-4">IV valides</th>
-            <th className="py-2 pr-4" title="échecs d'inversion / contrats ayant atteint Brent">
-              Échec inversion BS
+            <th className="py-2 pr-4">Raw contracts</th>
+            <th className="py-2 pr-4">Valid IVs</th>
+            <th className="py-2 pr-4" title="inversion failures / contracts that reached Brent">
+              BS inversion failures
             </th>
-            <th className="py-2 pr-4" title="prix manquant + bid/ask ≤ 0 + marché croisé">
-              Quotes rejetées
+            <th className="py-2 pr-4" title="missing price + bid/ask ≤ 0 + crossed market">
+              Quotes rejected
             </th>
-            <th className="py-2 pr-4">Spread large</th>
-            <th className="py-2 pr-4">Échéances</th>
+            <th className="py-2 pr-4">Wide spread</th>
+            <th className="py-2 pr-4">Expiries</th>
             <th className="py-2 pr-4">Strikes</th>
-            <th className="py-2 pr-4" title="médiane / p95 du spread bid-ask relatif sur les points gardés">
-              Spread méd / p95
+            <th className="py-2 pr-4" title="median / p95 of the relative bid-ask spread over kept points">
+              Spread med / p95
             </th>
-            <th className="py-2 pr-4" title="cellules de grille interpolées à partir de vraies données vs clampées">
-              Cellules obs / extrap
+            <th className="py-2 pr-4" title="grid cells interpolated from real data vs clamp-extrapolated">
+              Cells obs / extrap
             </th>
           </tr>
         </thead>
@@ -77,7 +77,7 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
               <tr key={r.snapshot_id} className="border-b border-neutral-800">
                 <td className="py-1.5 pr-4">
                   #{r.snapshot_id}
-                  {r.backfilled && <span className="text-amber-500" title="rétro-rempli : chaîne brute indisponible"> *</span>}
+                  {r.backfilled && <span className="text-amber-500" title="backfilled: raw chain unavailable"> *</span>}
                 </td>
                 <td className="py-1.5 pr-4 whitespace-nowrap">
                   {etDate(r.captured_at)}{" "}
@@ -85,7 +85,7 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
                   {isWeekendET(r.captured_at) && (
                     <span
                       className="text-amber-500"
-                      title="capturé un jour non ouvré (ET) : contient la clôture du vendredi précédent"
+                      title="captured on a non-trading day (ET): holds the previous Friday's close"
                     >
                       {" "}⚠
                     </span>
@@ -104,7 +104,7 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
                 <td className="py-1.5 pr-4">
                   {r.n_expiries}
                   {r.min_dte != null && (
-                    <span className="text-neutral-500"> ({r.min_dte}–{r.max_dte}j)</span>
+                    <span className="text-neutral-500"> ({r.min_dte}–{r.max_dte}d)</span>
                   )}
                 </td>
                 <td className="py-1.5 pr-4">{r.n_strikes}</td>
@@ -121,17 +121,17 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
       </table>
       {anyBackfilled && (
         <p className="text-neutral-500 mt-2">
-          <span className="text-amber-500">*</span> rétro-rempli : capturé avant l&apos;instrumentation
-          data-quality, la chaîne brute n&apos;est plus disponible — seules les métriques dérivées des
-          points stockés sont renseignées.
+          <span className="text-amber-500">*</span> backfilled: captured before the data-quality
+          instrumentation existed; the raw chain is no longer available, so only metrics derivable
+          from the stored points are filled in.
         </p>
       )}
       {anyWeekend && (
         <p className="text-neutral-500 mt-2">
-          <span className="text-amber-500">⚠</span> capturé un samedi/dimanche (ET) : la capture
-          quotidienne a tourné hors séance, la chaîne d&apos;options reflète donc la clôture du
-          vendredi précédent. Les jours fériés produisent le même effet mais ne sont pas détectés
-          ici. Voir aussi les caveats du panneau « Modèle vs persistence ».
+          <span className="text-amber-500">⚠</span> captured on a Saturday/Sunday (ET): the daily
+          capture ran outside a trading session, so the option chain reflects the previous Friday&apos;s
+          close. Exchange holidays have the same effect but are not detected here. See also the
+          caveats in the &ldquo;Model vs persistence&rdquo; panel.
         </p>
       )}
     </div>

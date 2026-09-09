@@ -66,20 +66,20 @@ export default function Home() {
       <h1 className="text-2xl font-semibold mb-4">Neural Volatility Surface — SPY</h1>
 
       {!snapshotsLoaded && !error && (
-        <p className="text-neutral-400 mb-4">Chargement des snapshots...</p>
+        <p className="text-neutral-400 mb-4">Loading snapshots…</p>
       )}
 
       {snapshotsLoaded && snapshots.length === 0 && !error && (
         <p className="text-neutral-400 mb-4">
-          Aucun snapshot disponible pour le moment — le pipeline de capture tourne
-          quotidiennement après la clôture du marché (17h ET). Reviens un peu plus tard.
+          No snapshot available yet — the capture pipeline runs once per trading day
+          after the market close (17:00 ET). Check back a little later.
         </p>
       )}
 
       {snapshots.length > 0 && (
         <div className="mb-4 flex items-center gap-3">
           <label htmlFor="snapshot-select" className="text-sm text-neutral-400">
-            Snapshot :
+            Snapshot:
           </label>
           <select
             id="snapshot-select"
@@ -96,41 +96,42 @@ export default function Home() {
         </div>
       )}
 
-      {error && <p className="text-red-400 mb-4">Erreur : {error}</p>}
-      {loading && <p className="text-neutral-400 mb-4">Chargement de la surface...</p>}
+      {error && <p className="text-red-400 mb-4">Error: {error}</p>}
+      {loading && <p className="text-neutral-400 mb-4">Loading surface…</p>}
 
       {surface && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
-            <Stat label="Points bruts (K,T,σ)" value={surface.n_raw_points} />
-            <Stat label="Échéances utilisées" value={surface.n_expiries_used} />
-            <Stat label="Échéances écartées (<2 pts)" value={surface.n_expiries_dropped} />
-            <Stat label="Spot à la capture" value={surface.spot.toFixed(2)} />
+            <Stat label="Raw points (K,T,σ)" value={surface.n_raw_points} />
+            <Stat label="Expiries used" value={surface.n_expiries_used} />
+            <Stat label="Expiries dropped (<2 pts)" value={surface.n_expiries_dropped} />
+            <Stat label="Spot at capture" value={surface.spot.toFixed(2)} />
           </div>
           <VolSurfacePlot surface={surface} />
         </>
       )}
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold mb-1">Modèle vs persistence</h2>
+        <h2 className="text-lg font-semibold mb-1">Model vs persistence</h2>
         <p className="text-neutral-400 text-sm mb-3">
-          Question : un modèle neuronal léger prédit-il la surface IV SPY de la séance
-          suivante mieux que l&apos;hypothèse de persistence (IV<sub>t+1</sub> = IV<sub>t</sub>) ?
-          Unique baseline. <em>RMSE masquée</em> = RMSE sur les seules cellules issues de
-          vraies cotations (observées + interpolées PCHIP), l&apos;extrapolation à plat des
-          ailes étant exclue. <em>LOPO</em> = leave-one-pair-out : chaque paire est prédite
-          par un modèle entraîné sur les autres. Chiffres recalculés à chaque déploiement du
-          backend ; la base peut contenir des captures plus récentes que le dernier recalcul.
+          Question: does a lightweight neural model predict the next-session SPY IV
+          surface better than the persistence hypothesis (IV<sub>t+1</sub> = IV<sub>t</sub>)?
+          Persistence is the only baseline. <em>Masked RMSE</em> = RMSE over only the
+          cells built from real quotes (observed + PCHIP-interpolated); the flat-clamp
+          extrapolation in the wings is excluded. <em>LOPO</em> = leave-one-pair-out:
+          each pair is predicted by a model trained on the others. Figures are recomputed
+          on every backend deploy; the database may hold captures more recent than the
+          last recompute.
         </p>
         <ModelEvaluation evaluation={evaluation} />
       </section>
 
       <section className="mt-10">
-        <h2 className="text-lg font-semibold mb-1">Qualité des données</h2>
+        <h2 className="text-lg font-semibold mb-1">Data quality</h2>
         <p className="text-neutral-400 text-sm mb-3">
-          Par snapshot : combien de la chaîne d&apos;options brute survit au filtrage de liquidité
-          et à l&apos;inversion Black-Scholes, pourquoi le reste est écarté, et quelle part de la
-          surface reconstruite est réelle vs extrapolée par clamp.
+          Per snapshot: how much of the raw option chain survives the liquidity filter
+          and the Black-Scholes inversion, why the rest is dropped, and how much of the
+          reconstructed surface is real vs clamp-extrapolated.
         </p>
         <DataQualityTable rows={dataQuality} />
       </section>

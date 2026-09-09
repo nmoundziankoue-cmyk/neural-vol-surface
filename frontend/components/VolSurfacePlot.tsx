@@ -44,8 +44,8 @@ export default function VolSurfacePlot({ surface }: { surface: VolSurfaceRespons
             colorscale: "Viridis",
             opacity: 1,
             showscale: true,
-            colorbar: { title: { text: "IV (décimal)" } },
-            name: "Interpolé (PCHIP)",
+            colorbar: { title: { text: "IV (decimal)" } },
+            name: "Interpolated (PCHIP)",
           },
           {
             type: "surface",
@@ -55,18 +55,18 @@ export default function VolSurfacePlot({ surface }: { surface: VolSurfaceRespons
             colorscale: "Viridis",
             opacity: 0.35,
             showscale: false,
-            name: "Extrapolé (clamp)",
+            name: "Extrapolated (clamp)",
           },
         ]}
         layout={{
           title: {
-            text: `Surface de volatilité implicite — ${surface.ticker} (snapshot #${surface.snapshot_id})`,
+            text: `Implied volatility surface — ${surface.ticker} (snapshot #${surface.snapshot_id})`,
           },
           autosize: true,
           scene: {
             xaxis: { title: { text: "log-moneyness k = ln(K/S) — spot" } },
-            yaxis: { title: { text: "TTE (années, ACT/365)" } },
-            zaxis: { title: { text: "IV (décimal annualisé)" } },
+            yaxis: { title: { text: "TTE (years, ACT/365)" } },
+            zaxis: { title: { text: "IV (annualized decimal)" } },
           },
           margin: { l: 0, r: 0, b: 0, t: 40 },
           paper_bgcolor: "rgba(0,0,0,0)",
@@ -77,13 +77,12 @@ export default function VolSurfacePlot({ surface }: { surface: VolSurfaceRespons
         config={{ responsive: true }}
       />
       <p className="text-neutral-500 text-xs mt-1">
-        Opacité pleine = cellules construites sur de vraies cotations (points
-        observés + interpolation PCHIP entre eux). Opacité réduite ={" "}
-        {pctExtrap}% de la grille = extrapolation à plat (clamp) au-delà de la
-        dernière cotation, dans l&apos;aile long-dated peu liquide — exclue de
-        toutes les métriques d&apos;erreur. Coordonnées : moneyness <em>spot</em>{" "}
-        k = ln(K/S), TTE calendaire ACT/365, IV en décimal annualisé (0,15 = 15
-        points de vol).
+        Full opacity = cells built from real quotes (observed points + PCHIP
+        interpolation between them). Reduced opacity = {pctExtrap}% of the grid =
+        flat extrapolation (clamp) beyond the last quote, in the illiquid
+        long-dated wing — excluded from every error metric. Coordinates:{" "}
+        <em>spot</em> moneyness k = ln(K/S), ACT/365 calendar TTE, IV as an
+        annualized decimal (0.15 = 15 vol points).
       </p>
     </div>
   );

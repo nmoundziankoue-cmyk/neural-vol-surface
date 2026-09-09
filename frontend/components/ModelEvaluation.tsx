@@ -19,7 +19,7 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
   if (!evaluation.available) {
     return (
       <p className="text-neutral-400 text-sm">
-        Aucune évaluation calculée pour l&apos;instant. {evaluation.verdict}
+        No evaluation has been computed yet. {evaluation.verdict}
       </p>
     );
   }
@@ -30,18 +30,18 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
     <div className="text-sm">
       {!e.statistically_significant && (
         <div className="mb-3 rounded border border-amber-700/60 bg-amber-950/40 px-3 py-2 text-amber-200">
-          Résultat <strong>non significatif statistiquement</strong> — données insuffisantes.
-          À lire comme un test de bout en bout du pipeline, pas comme une preuve que le modèle
-          fonctionne (ou non).
+          Result <strong>not statistically significant</strong> — insufficient data.
+          Read this as an end-to-end test of the pipeline, not as evidence that the model
+          works (or doesn&apos;t).
         </div>
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-        <Stat label="Paires adjacentes" value={String(e.n_pairs ?? "—")} />
-        <Stat label="RMSE persistence (poolée)" value={fmt(e.persistence_rmse)} />
-        <Stat label="RMSE modèle (LOPO, poolée)" value={fmt(e.model_rmse)} />
+        <Stat label="Adjacent pairs" value={String(e.n_pairs ?? "—")} />
+        <Stat label="Persistence RMSE (pooled)" value={fmt(e.persistence_rmse)} />
+        <Stat label="Model RMSE (LOPO, pooled)" value={fmt(e.model_rmse)} />
         <Stat
-          label="Amélioration relative"
+          label="Relative improvement"
           value={pct(e.relative_improvement)}
           tone={
             e.model_beats_persistence == null
@@ -60,13 +60,13 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
           <table className="text-xs border-collapse">
             <thead>
               <tr className="text-neutral-400 text-left border-b border-neutral-700">
-                <th className="py-1.5 pr-4">Paire (dates ET)</th>
-                <th className="py-1.5 pr-4" title="jours calendaires entre les deux instants de capture — pas le nombre de séances">
-                  Écart
+                <th className="py-1.5 pr-4">Pair (ET dates)</th>
+                <th className="py-1.5 pr-4" title="calendar days between the two capture timestamps — not the number of trading sessions">
+                  Gap
                 </th>
-                <th className="py-1.5 pr-4">Cellules notées</th>
-                <th className="py-1.5 pr-4">RMSE persistence</th>
-                <th className="py-1.5 pr-4">RMSE modèle</th>
+                <th className="py-1.5 pr-4">Cells scored</th>
+                <th className="py-1.5 pr-4">Persistence RMSE</th>
+                <th className="py-1.5 pr-4">Model RMSE</th>
               </tr>
             </thead>
             <tbody>
@@ -76,9 +76,9 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
                     {p.date_t} → {p.date_t1}
                   </td>
                   <td className="py-1.5 pr-4">
-                    {p.calendar_gap_days}j
+                    {p.calendar_gap_days}d
                     {!p.is_next_trading_day && (
-                      <span className="text-amber-500" title="pas un jour de bourse consécutif">
+                      <span className="text-amber-500" title="not a consecutive trading day">
                         {" "}⚠
                       </span>
                     )}
