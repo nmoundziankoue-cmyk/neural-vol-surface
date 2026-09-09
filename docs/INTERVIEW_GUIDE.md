@@ -6,8 +6,11 @@ answer → follow-up they'll ask next.**
 
 The honest framing to keep returning to: *this is a data-engineering +
 surface-construction project with a forecasting scaffold that cannot yet
-be evaluated, because there are 4 snapshots on non-consecutive days.*
-Owning that is the point. See also
+be evaluated. There are 5 snapshots; three landed on a weekend or holiday
+and carry the prior Friday's close, so only one of the four adjacent
+pairs (#75→#315) is a true next-session move.* Owning that is the point.
+Numbers below are the 2026-09-09 recompute; the live figure is
+`GET /api/evaluation`. See also
 [IV_AND_COORDINATES.md](IV_AND_COORDINATES.md).
 
 ---
@@ -177,14 +180,14 @@ shape it was already handed in `x`.
 **How this project uses it.** `app/ml/model.py` — a single residual
 connection around a `512-256-512` feedforward `Δ_net`. If `Δ_net` learns
 to output ≈ 0, the model *is* persistence, so it structurally cannot do
-much worse than the baseline — important when you have 3 training pairs.
+much worse than the baseline — important when you have 4 training pairs.
 
 **Likely question.** "Why residual prediction here specifically?"
 
 **Good answer.** With this little data, the residual formulation is a
 regulariser: the model's default behaviour is persistence, and it can
 only deviate by learning something from the (tiny) data. A direct `x → y`
-model with 1.3M parameters and 3 examples would just memorise, and its
+model with 1.3M parameters and 4 examples would just memorise, and its
 untrained behaviour is arbitrary rather than a sensible baseline.
 
 **Follow-up.** "Isn't a feedforward net on a flattened 1600-vector
@@ -210,18 +213,21 @@ useful, no matter how low its absolute error looks.
 **How this project uses it.** It's the *only* baseline (no PCA baseline —
 not enough data). `app/ml/evaluate.py` computes persistence masked RMSE
 per pair and pooled, and every model number is reported as a relative
-improvement over it. Current result: **−82.9%**, i.e. the model is worse.
+improvement over it. Current result: **−51.4%** (model masked RMSE 0.0198
+vs persistence 0.0131), i.e. the model is worse.
 
 **Likely question.** "Your model loses to persistence. Why is that in the
 README?"
 
 **Good answer.** Because the deliverable is the honest measurement
 harness, not a winning model. Hiding a negative result would be the
-actual red flag. And the −82.9% isn't "the model is 83% worse" — it's a
-leave-one-pair-out number from 3 folds each trained on 2 pairs, so it's
-almost pure variance. The correct statement is "there is not enough data
-to evaluate the model", and the API's `statistically_significant` flag
-encodes exactly that.
+actual red flag. And the −51.4% isn't "the model is 51% worse" as a
+stable fact — it's a leave-one-pair-out number from 4 folds each trained
+on 3 non-independent pairs, on a sample where only one pair is a real
+next-session move. It's almost pure variance: the previous recompute, one
+snapshot ago, read −82.9%. The correct statement is "there is not enough
+data to evaluate the model", and the API's `statistically_significant`
+flag encodes exactly that.
 
 **Follow-up.** "When would a PCA / factor baseline be worth adding?" →
 Once there are enough snapshots to estimate a covariance across grid
@@ -234,8 +240,10 @@ noise and a 'PCA forecast' is theatre.
 ## 7. Masked RMSE and why extrapolated cells are excluded
 
 **What it is.** RMSE computed only over grid cells where
-`extrapolated_mask` is `False` — the cells built from real interpolated
-quotes, not the flat clamp fill in the wings.
+`extrapolated_mask` is `False` — cells built from real quotes, i.e.
+observed points and the PCHIP interpolation strictly between them, but
+**not** the flat clamp fill past the last knot in the wings. Interpolated
+cells count; extrapolated ones don't.
 
 **Why it matters.** ~60% of the default 40×40 grid is clamp-extrapolated
 (a constant value copied from the boundary). Both persistence *and* any
@@ -260,17 +268,25 @@ matters is the target's.
 **Follow-up.** "Doesn't masking make the metric non-comparable across
 days, since the mask changes?" → Yes, slightly — different days expose
 different numbers of real cells. I report the pooled RMSE over all real
-cells across all pairs, plus per-pair numbers with the cell count, so the
-weighting is visible. With more data I'd fix a common evaluation region
-(e.g. |k| < 0.15, T < 1y) that's observed on every day.
+cells across all pairs (`sqrt(mean(squared error))` over the union, not
+the mean of per-pair RMSEs), plus per-pair numbers with the cell count,
+so the weighting is visible. There's a second-order effect too: the
+evaluation grid is the *intersection* of every loaded snapshot's observed
+range, so adding one snapshot can shift every pair's scored region and
+move all the RMSEs a little — which is part of why the pooled figure
+jumped from −82.9% to −51.4% when snapshot #315 arrived. With more data
+I'd fix a common evaluation region (e.g. |k| < 0.15, T < 1y) observed on
+every day and score only inside it.
 
 ---
 
 ## 8. Why few snapshots caps the statistical validity
 
-**What it is.** With 4 snapshots there are 3 consecutive pairs; two of
-them span 22 and 36 calendar days. Any RMSE comparison is one draw from a
-distribution with enormous variance.
+**What it is.** 5 snapshots → 4 chronologically-adjacent pairs; two span
+22 and 36 calendar days, and three of the five captures landed on a
+weekend/holiday so they hold the prior Friday's close. Only #75→#315 is a
+real one-session move. Any RMSE comparison is one draw from a distribution
+with enormous variance.
 
 **Why it matters.** You cannot separate skill from luck. There's no
 held-out test set. There's no coverage of different vol regimes (the
@@ -282,8 +298,9 @@ than the one-day-ahead question.
 `statistically_significant` is `False` unless there are ≥ 20 pairs *and*
 every pair is a next-trading-day pair. It's not a p-value — it's a
 refusal to call anything significant until the data exists. The verdict
-string and `caveats` list say why in plain language, and the frontend
-shows a "not significant" banner.
+string and `caveats` list say why in plain language (including which
+snapshots were weekend captures), and the frontend shows a "not
+significant" banner.
 
 **Likely question.** "How many snapshots would you actually need?"
 
@@ -291,8 +308,22 @@ shows a "not significant" banner.
 persistence-relative RMSE with a usable confidence interval — and that's
 just for a point estimate. To *trust* a model that beats persistence I'd
 want several hundred days spanning at least one high-vol and one low-vol
-regime, evaluated walk-forward. Right now I have effectively one usable
-pair.
+regime, evaluated walk-forward. Right now I have one usable pair.
+
+**Follow-up.** "Why leave-one-pair-out rather than a single holdout, with
+so few pairs?" → A single holdout would spend a quarter of an already
+tiny sample on one test point, and the estimate would swing entirely on
+*which* pair I held out — the pair-to-pair RMSE spread here is roughly 3×.
+LOPO uses every pair as the test exactly once and averages, which is the
+lowest-variance almost-unbiased estimator available at this n; k-fold
+with k < n just trains on even less with no offsetting benefit. It's
+still barely worth computing — each fold trains on three pairs — and it
+isn't clean: adjacent pairs share a snapshot (pair *i*'s *t+1* is pair
+*i+1*'s *t*), so a fold's test pair overlaps its training pairs by one
+surface and the LOPO number is mildly optimistic. Leave-one-*snapshot*-out
+would be stricter; with four pairs it collapses to almost nothing, so I
+report LOPO and flag the leakage in the caveats rather than pretend it
+away.
 
 **Follow-up.** "So why build the model at all now?" → To make the
 pipeline end-to-end and the evaluation honest *before* the data arrives,
@@ -303,10 +334,10 @@ the methodology, and not the incentives to fudge them.
 
 ## 9. Detecting overfitting with almost no data
 
-**What it is.** Knowing whether the model has memorised its 3 pairs
+**What it is.** Knowing whether the model has memorised its 4 pairs
 rather than learned anything.
 
-**Why it matters.** A `512-256-512` net has ~1.3M parameters. Three
+**Why it matters.** A `512-256-512` net has ~1.3M parameters. Four
 1600-dim training pairs. In-sample it will hit ≈ 0 RMSE — that number is
 meaningless.
 
@@ -315,7 +346,7 @@ meaningless.
   predicted by a model trained only on the others. The reported model
   RMSE is that out-of-sample number, not the in-sample one.
 - **The comparison to persistence is the overfitting test.** Out of
-  sample the model scores −82.9% vs persistence → it is overfitting /
+  sample the model scores −51.4% vs persistence → it is overfitting /
   underdetermined, full stop.
 - **The residual architecture** bounds the damage: worst case it drifts
   from persistence rather than from zero.
@@ -324,12 +355,30 @@ meaningless.
 **Likely question.** "How do you know it's overfitting and not just a bad
 architecture?"
 
-**Good answer.** I can't fully separate those two with 3 pairs — that's
-the point. But the LOPO error being ~2× persistence, while in-sample
+**Good answer.** I can't fully separate those two with 4 pairs — that's
+the point. But the LOPO error being ~1.5× persistence, while in-sample
 error is ~0, is the classic memorisation signature. With more data the
 diagnostic would be a learning curve (train vs walk-forward error vs
 number of pairs) — if the gap doesn't close as data grows, it's capacity;
 if it does, it was data starvation.
+
+**Follow-up.** "Once you have 20+ pairs, what tells a model that *works*
+apart from a variance artifact?" → No single test — a stack that has to
+clear together: (1) it beats persistence out-of-sample in a large
+majority of walk-forward steps, not just on pooled RMSE — a sign test or
+Diebold-Mariano on the per-step loss differential; (2) the RMSE edge
+exceeds the bid-ask noise floor (compare it to the median half-spread
+expressed in vol points — an edge smaller than the quote noise isn't
+real); (3) it also beats a cheap statistical baseline — EWMA / AR(1) on
+ATM total variance, random-walk-with-drift on the top PCA factors — not
+just naive persistence; (4) the edge survives stratification by VIX
+regime instead of coming entirely from one calm stretch; (5) the
+learning curve shows the train/test gap closing as pairs accumulate
+(data starvation) rather than plateauing (capacity/misspecification);
+(6) the predicted daily change has sane sign and magnitude around known
+catalysts (Fed days, CPI). Any one of those can be luck; the bar is
+clearing most of them at once, on data the model never touched in
+training.
 
 **Follow-up.** "What single change would most reduce overfitting risk
 here?" → Fewer parameters that respect the grid structure — a small
@@ -388,22 +437,29 @@ instead of hand-waving it.
 
 Honest answers that own the limitations rather than hide them.
 
-**1. "Your model loses to persistence by 83%. Why should I take this
+**1. "Your model loses to persistence by 51%. Why should I take this
 project seriously?"**
 Because the project's contribution is the honest pipeline and evaluation,
-not the model. The −83% is a leave-one-pair-out figure from 3 folds
-trained on 2 pairs each — it's variance, not a measurement. The correct
-statement, which the API and README both make, is "insufficient data to
-evaluate". A candidate who showed a model *beating* persistence on 3
+not the model. The −51% is a leave-one-pair-out figure from 4 folds
+trained on 3 non-independent pairs each — it's variance, not a
+measurement, and it read −83% one snapshot ago. The correct statement,
+which the API and README both make, is "insufficient data to evaluate". A
+candidate who showed a model *beating* persistence on four
 non-consecutive pairs and presented it as a result would be the concern.
 
-**2. "Two of your three pairs span 22 and 36 days. Persistence over a
-month is a straw man — and you still lose to it."**
-Correct on both counts, and I say so in the evaluation output. Only the
-one 3-day pair is a fair one-session test, and n = 1 there. The multi-day
-pairs are in the dataset because they're the only data that exists; the
-evaluation flags every gap and the significance gate rejects the whole
-set.
+**2. "Two of your four pairs span 22 and 36 days, and three of your five
+snapshots were captured on non-trading days. Persistence over a month is
+a straw man — and you still lose to it."**
+Correct on every count, and the evaluation output says so. The weekend
+and holiday captures (#23 Sat, #54 Sun, #75 Labor Day) hold the previous
+Friday's close, so `calendar_gap_days` — which is measured between capture
+timestamps — understates the real session gap; pair #1→#23 is tagged
+`is_next_trading_day` even though its content is Wed→Fri. The only clean
+one-session pair is #75→#315 (Fri 09-04 close → Tue 09-08 close across
+Labor Day), n = 1, and it's the pair the model does *worst* on (0.0263 vs
+0.0123). The multi-day pairs are in the dataset because they're the only
+data that exists; the evaluation flags every gap, lists the weekend
+captures, and the significance gate rejects the whole set.
 
 **3. "You invert Black-Scholes on end-of-day mid prices. Isn't that the
 worst possible time — stale quotes, widest spreads?"**
@@ -422,15 +478,46 @@ the discount factor is wrong for long maturities, biasing their IV by a
 fraction of a vol point (the rate error at 18M might be 50-100bp, and IV
 sensitivity to r is small for near-ATM options). The fix is bootstrapping
 a short-rate curve from the bill/note ladder — straightforward, just not
-the binding constraint when the dataset is 4 points.
+the binding constraint when the dataset is 5 points.
 
 **5. "Quantify the European-vs-American pricing error for SPY."**
-Early exercise is essentially never optimal for OTM options, so on the
-OTM-only points the surface is built from, the premium is a bp or two of
-IV. It grows for ITM puts (forgone interest + dividend capture) and would
-be worst for deep ITM puts — which are exactly what the OTM-side filter
-removes. So the bias on kept points is small; the filter is doing double
-duty.
+Direction first: the American price ≥ the European price, so treating an
+American quote as European makes `bs_price(σ)` too cheap at the true σ,
+and the solver pushes σ **up** to compensate — the inversion
+over-estimates IV, by more where the early-exercise premium is larger.
+
+Bound it by wing:
+- **OTM calls (K > S).** Early exercise of a call is only rational to
+  capture a dividend that exceeds the interest earned by deferring the
+  strike payment. SPY pays ~1.2%/yr in four discrete dividends (~0.3% of
+  spot each); with `r ≈ 4%` the carry never favours early exercise for an
+  out-of-the-money call. Premium ≈ 0; IV bias sub-bp.
+- **OTM puts (K < S).** American puts carry an early-exercise premium
+  (forgone interest on the strike), but early exercise is only optimal
+  below a critical price well *under* K — the option has to go
+  substantially ITM first. For a contract that is currently OTM the
+  premium is second-order: the value of a right you can only use after
+  the surface has moved a long way against you. On a ~1.2%-yield
+  underlying at `r ≈ 4%`, that's a few bps of IV for short-dated OTM
+  puts, growing with maturity (more time to reach the exercise region)
+  toward maybe 20–40 bps for `T ≈ 1y` puts near the money. The crude
+  `K(1 − e^{−rT})` bound (~1% of K at 3 months) is far too loose to be
+  useful here — it's near the whole premium of a short-dated OTM put.
+- **ITM (both sides).** The premium is largest here — tens of bps to a
+  vol point for deep ITM puts — but the OTM-side filter drops every ITM
+  contract before inversion, so none of these reach the surface. That
+  filter is doing double duty: de-duplication *and* removing the
+  contracts where the European approximation is worst.
+
+How I'd actually put a number on it rather than argue bounds: take a
+sample of kept contracts, reprice each with a Cox-Ross-Rubinstein
+American binomial tree (~500–1000 steps) at the σ the European inversion
+produced, take the price gap, and re-invert the European formula on
+`european_price + gap` to get ΔIV per contract. Aggregate ΔIV by
+moneyness/TTE bucket and add it to the data-quality report. Expected
+result for the OTM wing the surface is built from: a few bps of IV,
+i.e. well inside the EOD quote noise — which is why it's accepted
+uncorrected.
 
 **6. "Your PCHIP is separable — smile then term structure. What does the
 non-jointness cost you?"**
@@ -453,7 +540,7 @@ marked than a full one that pretends the wings are data.
 
 **8. "You explicitly refuse to add drift/regime monitoring. How would you
 know your model has gone stale in production?"**
-I refuse it *now* because with 4 snapshots any drift statistic is noise
+I refuse it *now* because with 5 snapshots any drift statistic is noise
 and would add false precision. With ~60+ snapshots: track the rolling
 persistence RMSE (a spike = the surface moved a lot, i.e. a regime
 event) and the rolling model-minus-persistence delta (widening = model
@@ -463,20 +550,31 @@ project is trying not to ship.
 
 **9. "The evaluation retrains the model on every run. Non-deterministic
 and slow — why is that acceptable?"**
-It's deterministic — fixed seed, fixed epoch count, full-batch. It's a
-few seconds, so it's computed by the capture job and cached to
-`models/evaluation_SPY.json`; the API just serves the file. At any real
-scale, training becomes a separate job producing a versioned artifact,
-and the evaluation loads that artifact rather than refitting. At 3 pairs,
-refitting in-process is simpler and the cost is zero.
+It's deterministic — fixed seed, fixed epoch count, full-batch, a few
+seconds — and it is *not* on the request path. `scripts/evaluate.py`
+writes `models/evaluation_SPY.json`, and `GET /api/evaluation` just
+serves that file. Trade-off I made explicitly: on the deployed backend
+the file is the copy **baked into the Docker image**, so it only refreshes
+when the image rebuilds (a deploy), not when the daily capture writes a
+new snapshot to the DB — the other endpoints read the DB live, so the
+evaluation panel can lag them by a snapshot or two. I chose that over a
+live recompute because LOPO retrains the model N times and would make
+every `/api/evaluation` hit multi-second on a free-tier box with no
+caching. At real scale, training is a separate job emitting a versioned
+artifact and the evaluation loads it; at four pairs, a committed JSON
+refreshed on deploy is the honest minimum.
 
 **10. "You get 2 years of clean daily data tomorrow. What do you check
 before believing a model that beats persistence?"**
 Walk-forward, expanding-window evaluation — never a random split, because
-day-to-day autocorrelation leaks the test set into training. Then: does
-it beat persistence in *every* sub-period or just on average? Does it
-also beat a cheap statistical baseline (EWMA / AR(1) on ATM total
-variance), not just naive persistence? Is the RMSE edge larger than the
-bid-ask-implied noise floor? And does the edge survive stratification by
-VIX regime, or is it all coming from one calm stretch? Only if it clears
-all of those would I call it a result.
+day-to-day autocorrelation leaks the test set into training. Then: is the
+per-step (model − persistence) loss differential negative in a large
+majority of steps, not just on the pooled mean (sign test /
+Diebold-Mariano, since one big week can carry a pooled RMSE)? Does it also
+beat a cheap statistical baseline (EWMA / AR(1) on ATM total variance,
+RW-with-drift on the top PCs), not just naive persistence? Is the RMSE
+edge larger than the bid-ask-implied noise floor? Does a learning curve
+show the train/walk-forward gap *closing* as data accumulates rather than
+plateauing? And does the edge survive stratification by VIX regime, or is
+it all from one calm stretch? Only if it clears all of those would I call
+it a result. (Same checklist, condensed, in §9's follow-up.)

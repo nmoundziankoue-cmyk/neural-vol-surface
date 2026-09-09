@@ -12,6 +12,16 @@ import VolSurfacePlot from "@/components/VolSurfacePlot";
 import DataQualityTable from "@/components/DataQualityTable";
 import ModelEvaluation from "@/components/ModelEvaluation";
 
+// Snapshots are labelled by their ET capture instant everywhere in the
+// UI, so the dropdown, the data-quality table and the evaluation panel
+// all agree on which calendar day a snapshot belongs to.
+const etDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("en-CA", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }) + " ET";
+
 export default function Home() {
   const [snapshots, setSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
@@ -79,7 +89,7 @@ export default function Home() {
           >
             {snapshots.map((s) => (
               <option key={s.id} value={s.id}>
-                #{s.id} — {new Date(s.captured_at).toLocaleString()} — spot {s.spot.toFixed(2)}
+                #{s.id} — {etDateTime(s.captured_at)} — spot {s.spot.toFixed(2)}
               </option>
             ))}
           </select>
@@ -91,11 +101,11 @@ export default function Home() {
 
       {surface && (
         <>
-          <div className="grid grid-cols-4 gap-4 mb-4 text-sm">
-            <Stat label="Points bruts" value={surface.n_raw_points} />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4 text-sm">
+            <Stat label="Points bruts (K,T,σ)" value={surface.n_raw_points} />
             <Stat label="Échéances utilisées" value={surface.n_expiries_used} />
-            <Stat label="Échéances droppées" value={surface.n_expiries_dropped} />
-            <Stat label="Spot" value={surface.spot.toFixed(2)} />
+            <Stat label="Échéances écartées (<2 pts)" value={surface.n_expiries_dropped} />
+            <Stat label="Spot à la capture" value={surface.spot.toFixed(2)} />
           </div>
           <VolSurfacePlot surface={surface} />
         </>
@@ -104,9 +114,13 @@ export default function Home() {
       <section className="mt-10">
         <h2 className="text-lg font-semibold mb-1">Modèle vs persistence</h2>
         <p className="text-neutral-400 text-sm mb-3">
-          Question : un modèle neuronal léger prédit-il la surface IV SPY du lendemain mieux que
-          l&apos;hypothèse de persistence (IV<sub>t+1</sub> = IV<sub>t</sub>) ? Unique baseline,
-          RMSE masquée, validation leave-one-pair-out.
+          Question : un modèle neuronal léger prédit-il la surface IV SPY de la séance
+          suivante mieux que l&apos;hypothèse de persistence (IV<sub>t+1</sub> = IV<sub>t</sub>) ?
+          Unique baseline. <em>RMSE masquée</em> = RMSE sur les seules cellules issues de
+          vraies cotations (observées + interpolées PCHIP), l&apos;extrapolation à plat des
+          ailes étant exclue. <em>LOPO</em> = leave-one-pair-out : chaque paire est prédite
+          par un modèle entraîné sur les autres. Chiffres recalculés à chaque déploiement du
+          backend ; la base peut contenir des captures plus récentes que le dernier recalcul.
         </p>
         <ModelEvaluation evaluation={evaluation} />
       </section>

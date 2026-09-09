@@ -44,6 +44,14 @@ MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 
 # Significance gate. A "pair" only counts as a genuine one-day-ahead
 # forecast test if the two snapshots are consecutive trading days.
+#
+# is_next_trading_day is approximated as calendar_gap_days <=
+# SIGNIFICANCE_MAX_GAP_DAYS, where the gap is measured between the two
+# snapshots' ET capture dates. This is only a proxy: a snapshot captured
+# on a weekend or an exchange holiday holds the prior session's close, so
+# a pair bracketing such a snapshot can pass this check while its market
+# content spans more than one session. The caveats list flags weekend
+# captures explicitly; holidays are not auto-detected.
 SIGNIFICANCE_MIN_PAIRS = 20          # ~a month of clean daily data
 SIGNIFICANCE_MAX_GAP_DAYS = 4        # Fri->Mon is 3; anything more is a hole
 
@@ -112,8 +120,9 @@ def _fit(X: torch.Tensor, y: torch.Tensor, grid_size: int) -> VolSurfaceForecast
 
 def _lopo_predictions(dataset, grid_size: int) -> torch.Tensor:
     """Leave-one-pair-out: row i is the prediction for pair i from a model
-    trained on every pair except i. Out-of-sample even with 2-3 pairs
-    (though extremely high variance at that size)."""
+    trained on every pair except i. Out-of-sample even with a handful of
+    pairs (though extremely high variance at that size, and not fully
+    independent since adjacent pairs share a snapshot)."""
     n = dataset.X.shape[0]
     preds = torch.empty_like(dataset.y)
     idx = torch.arange(n)
@@ -216,8 +225,30 @@ def build_evaluation_report(
             f"Model RMSE is leave-one-pair-out cross-validated, but with "
             f"{report.n_pairs} pair(s) each fold trains on only "
             f"{report.n_pairs - 1} pair(s) - the number is out-of-sample but "
-            f"has enormous variance and should not be read as a point estimate."
+            f"has enormous variance and should not be read as a point estimate. "
+            f"Adjacent pairs also share a snapshot (pair i's t+1 is pair i+1's "
+            f"t), so the folds are not fully independent."
         )
+
+        weekend = [
+            (sid, dates[sid])
+            for sid in sorted(
+                {s for p in pair_evals for s in (p.snapshot_id_t, p.snapshot_id_t1)}
+            )
+            if dates[sid].weekday() >= 5
+        ]
+        if weekend:
+            listed = ", ".join(
+                f"#{sid} ({d.isoformat()}, {d.strftime('%a')})" for sid, d in weekend
+            )
+            report.caveats.append(
+                "Weekend captures (ET), which carry the prior session's close: "
+                + listed
+                + ". calendar_gap_days spans capture timestamps, not trading "
+                "sessions, so is_next_trading_day can be True for a pair whose "
+                "market content spans two or more sessions. Exchange holidays "
+                "are not detected here and have the same effect."
+            )
 
         report.verdict = _verdict(report)
         return report

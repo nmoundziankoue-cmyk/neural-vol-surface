@@ -28,13 +28,16 @@ changed its dividend-yield units and my normaliser was passing through a
 Fixed; it's back to zero."
 
 **[0:55 — the honest result]** *(scroll to the model-vs-persistence panel)*
-"And here's the result, stated the only honest way: I have **4 snapshots
-on non-consecutive days**, so **3 pairs**, two of which span three to five
-weeks. On those, the model — leave-one-pair-out cross-validated — **loses
-to persistence by 83%**. That number is basically variance. The API has a
-hard 'not statistically significant' gate that won't flip until there are
-20-plus clean next-day pairs. The pipeline is done and validated
-end-to-end; the model is not, and I'm not going to pretend otherwise."
+"And here's the result, stated the only honest way: **5 snapshots**, so
+**4 adjacent pairs** — but three of those captures landed on a weekend or
+holiday and hold the prior Friday's close, so **exactly one pair is a
+real next-session move**, and two of the rest span three to five weeks.
+Pooled over them, the model — leave-one-pair-out cross-validated — **loses
+to persistence by about 50%** (it was 83% one snapshot ago; that swing is
+the point). That number is basically variance. The API has a hard 'not
+statistically significant' gate that won't flip until there are 20-plus
+clean next-day pairs. The pipeline is done and validated end-to-end; the
+model is not, and I'm not going to pretend otherwise."
 
 **[1:20 — close]**
 "So what's actually finished is the hard part: a self-sustaining data

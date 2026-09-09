@@ -1,7 +1,7 @@
 # Neural Volatility Surface Forecaster — SPY
 
-**▶ Live demo: https://REPLACE-ME.vercel.app**
-&nbsp;·&nbsp; API: `https://REPLACE-ME.onrender.com` (`/api/evaluation`, `/api/data-quality`, `/api/surfaces/latest`)
+**▶ Live demo: https://neural-vol-surface.vercel.app**
+&nbsp;·&nbsp; API: `https://neural-vol-surface-backend.onrender.com` (`/api/evaluation`, `/api/data-quality`, `/api/surfaces/latest`)
 
 > Hosted on free tiers (Render web service + Neon Postgres). The backend
 > cold-starts after ~15 min idle — the first request can take 30–60 s, so
@@ -14,12 +14,15 @@
 > surface better than the persistence hypothesis (IV̂ₜ₊₁ = IVₜ)?
 
 **Current answer: no, and — more importantly — the dataset is far too
-small to answer it either way.** As of this writing the database holds
-**4 snapshots on non-consecutive days**. On the 3 pairs that form, a
-leave-one-pair-out–validated model has a masked RMSE of **0.0246 vs
-persistence's 0.0135** (relative improvement **−82.9%**). That number is
-not evidence about the model; it is a pipeline smoke test. See
-[Baseline and results](#8-baseline-and-results).
+small to answer it either way.** As of 2026-09-09 the database holds
+**5 snapshots**, forming **4 chronologically-adjacent pairs**, of which
+**exactly one is a genuine single-session move** (three of the five
+captures ran on a weekend or holiday and carry the previous Friday's
+close — see [§8](#8-baseline-and-results)). Pooled over those pairs, a
+leave-one-pair-out–validated model has a masked RMSE of **0.0198 vs
+persistence's 0.0131** (relative improvement **−51.4%**). That number is
+not evidence about the model; it is a pipeline smoke test. Live figures:
+`GET /api/evaluation`.
 
 The engineering that *is* real and finished: end-to-end daily capture of
 a data series that exists nowhere for free, in-house Black-Scholes
@@ -106,8 +109,12 @@ exactly one bucket, `RejectionBreakdown.accounted() == n_contracts_raw`):
 7. `wide_spread` — (ask − bid)/mid > 0.5
 8. `inversion_failed` — Brent found no root in [1e-4, 5.0] (arbitrage-violating quote)
 
-Typical yield: ~9 800 raw contracts → ~5 000 `VolPoint` rows. `otm_side`
-is ~40% of the drop and is deliberate de-duplication, not a data problem.
+Observed on snapshot #315: 9 860 raw contracts → 4 990 `VolPoint` rows.
+The `otm_side` bucket (3 869) is ~40% of the raw chain and ~80% of all
+rejections — it's the deliberate OTM-only de-duplication (keep the OTM
+call *or* the OTM put at each strike, never both), not a data problem.
+`short_dte` (512), `wide_spread` (195) and non-positive/crossed quotes
+(285) account for essentially all of the rest; `inversion_failed` was 0.
 
 We store **raw points, not a pre-built grid**, so the PCHIP grid choice
 can be revisited at read/train time.
@@ -199,35 +206,53 @@ observed ranges before pairing or scoring.
 PCA forecast — there is nowhere near enough history for either to be
 anything but noise.
 
-The model number is **leave-one-pair-out cross-validated**: each pair is
-predicted by a model trained only on the *other* pairs, so it is
-genuinely out-of-sample even on 3 pairs. (Fitting on all pairs and
-scoring in-sample just reports the ~0 memorisation floor and tells us
-nothing.)
+"Masked RMSE" here means: RMSE over the grid cells built from real quotes
+— observed points and the PCHIP interpolation between them — with the
+~60% of cells that are flat-clamp-extrapolated in the wings excluded (see
+[§6](#6-surface-reconstruction--separable-pchip) and
+`docs/INTERVIEW_GUIDE.md` §7). "Pooled" means one RMSE over every scored
+cell of every pair — `sqrt(mean(squared error))` across the union —
+**not** the mean of the per-pair RMSEs, which is why the pooled
+persistence figure (0.0131) sits above the simple average of the four
+per-pair values.
 
-Live numbers, recomputed after every capture (`scripts/evaluate.py`,
-served at `GET /api/evaluation`):
+The model number is **leave-one-pair-out (LOPO) cross-validated**: each
+pair is predicted by a model trained only on the *other* pairs, so it is
+out-of-sample even at this size. (Fitting on all pairs and scoring
+in-sample just reports the ≈0 memorisation floor and tells us nothing.)
+Caveat: adjacent pairs share a snapshot — pair *i*'s day *t+1* is pair
+*i+1*'s day *t* — so the folds are not fully independent and the LOPO
+number is, if anything, optimistic.
+
+Live numbers, refreshed on each backend deploy (`scripts/evaluate.py`,
+served at `GET /api/evaluation`) — values below are the 2026-09-09
+recompute:
 
 | | value |
 |---|---|
-| Snapshots | 4 — ET dates 2026-07-08, 07-11, 08-16, 09-07* |
-| Pairs | 3 — calendar gaps **3, 36 and 22 days** |
-| Persistence masked RMSE (pooled) | **0.0135** |
-| Model masked RMSE (LOPO, pooled) | **0.0246** |
-| Relative improvement | **−82.9%** |
+| Snapshots | 5 — ET capture dates 2026-07-08 (Wed), 07-11 (Sat*), 08-16 (Sun*), 09-07 (Mon, Labor Day*), 09-08 (Tue) |
+| Pairs | 4 — calendar gaps **3, 36, 22, 1 days**; **only the last (#75→#315) is a true single-session move** |
+| Persistence masked RMSE (pooled) | **0.0131** |
+| Model masked RMSE (LOPO, pooled) | **0.0198** |
+| Relative improvement | **−51.4%** (model is worse) |
 | Beats persistence? | **No** |
-| Statistically significant? | **No** (hard gate: ≥ 20 next-trading-day pairs) |
+| Statistically significant? | **No** — hard gate: ≥ 20 pairs *and* every pair a next-trading-day pair |
 
-<sub>* snapshot #75 was captured on the 2026-09-07 Labor Day holiday and
-reflects the 2026-09-04 close.</sub>
+<sub>* Captured on a non-trading day (ET), so the snapshot holds the prior
+Friday's close: #23 → 2026-07-10, #54 → 2026-08-14, #75 → 2026-09-04.
+`calendar_gap_days` is measured between capture timestamps, not trading
+sessions, so pair #1→#23 is tagged `is_next_trading_day` despite its
+content spanning Wed→Fri (two sessions). The one clean pair is #75→#315:
+Fri 09-04 close → Tue 09-08 close, one session across the Labor Day
+weekend — and it is where the model does worst (0.0263 vs 0.0123).</sub>
 
-**Honest reading:** with 3 pairs — two of which span multi-week gaps, so
-"persistence" is being asked to hold a surface across 3–5 weeks rather
-than one session — and cross-validation folds that train on 2 pairs,
-nothing here supports a conclusion. The `statistically_significant` flag
-in the API is a hard gate that will stay `false` until ≥ 20 clean
-next-trading-day pairs exist. The pipeline is validated end to end; the
-model is not.
+**Honest reading:** four pairs, only one a real next-session forecast (and
+`n = 1` there); two spanning multi-week gaps where "persistence" is asked
+to hold a surface for 3–5 weeks; LOPO folds that train on three
+non-independent pairs. Nothing here supports a conclusion in either
+direction. The `statistically_significant` flag in the API is a hard gate
+that stays `false` until ≥ 20 clean next-trading-day pairs exist. The
+pipeline is validated end to end; the model is not.
 
 ---
 
@@ -250,16 +275,18 @@ frontend). It records, per snapshot:
 **Nothing is rejected silently** — `RejectionBreakdown.accounted()` must
 equal the raw contract count or the capture logs a warning.
 
-Snapshots captured before this layer existed (all 4 current ones) carry a
-`backfilled = true` flag: the derivable half (coverage, spreads, surface
-cells) is filled from the stored points; the raw-chain rejection counts
-are `null` because the raw chain isn't kept.
+Snapshots captured before this layer existed (the four backfilled ones —
+#1, #23, #54, #75) carry a `backfilled = true` flag: the derivable half
+(coverage, spreads, surface cells) is filled from the stored points; the
+raw-chain rejection counts are `null` because the raw chain isn't kept.
+Only #315 onward (captured by the GitHub Actions job) has the full
+raw-chain accounting.
 
 ---
 
 ## 10. Tests
 
-`cd backend && PYTHONPATH=. pytest` — **54 tests, ~2 s.** DB-backed tests
+`cd backend && PYTHONPATH=. pytest` — **54 tests, ~3 s.** DB-backed tests
 run against the same local Postgres as the app, isolated by a dedicated
 `TEST_XYZ` ticker cleaned before/after each test.
 
@@ -305,9 +332,18 @@ end-to-end (would need a yfinance mock).
 - **Seeding the hosted DB**: Neon starts empty. After the backend's first
   deploy has run `alembic upgrade head`, load the local snapshots once:
   `pg_dump --data-only --no-owner -t snapshots -t vol_points -t data_quality_reports "$LOCAL_URL" | psql "$NEON_URL"`.
-  `models/evaluation_SPY.json` is committed as a seed so `/api/evaluation`
-  renders immediately; refresh it with `python scripts/evaluate.py` +
-  redeploy.
+- **Evaluation report staleness (known)**: `/api/evaluation` serves
+  `backend/models/evaluation_SPY.json` **as baked into the Docker image**,
+  not a live recompute. `/api/data-quality`, `/api/snapshots` and the
+  surface endpoints all read Neon live, so between deploys the evaluation
+  panel can lag the rest of the UI by a snapshot or two. The daily capture
+  regenerates the file on the GitHub runner (writing to the DB, not to
+  Render), so the served copy only moves when the image rebuilds. To
+  refresh it deliberately: `PYTHONPATH=. python scripts/evaluate.py`
+  against the Neon URL, commit the new JSON, let Render redeploy. A live
+  recompute on each request is avoided on purpose — LOPO retrains the
+  model 4+ times and would make every `/api/evaluation` hit multi-second
+  on the free tier.
 - **Daily capture**: `.github/workflows/daily_capture.yml`, two UTC cron
   triggers (21:00 and 22:00) so the capture lands at 17:00 ET year-round
   regardless of DST; the second run of the day is a harmless dedup no-op.
@@ -361,18 +397,22 @@ cd ../frontend && npm install && npm run dev   # http://localhost:3000
 
 ## 12. Known limitations
 
-- **Dataset size — the binding constraint.** 4 snapshots, 3
-  non-consecutive pairs. No model conclusion is possible; nothing that
-  needs history (PCA, walk-forward validation, regime detection, drift
-  monitoring, ensembles) is implemented, on purpose — with this much data
-  it would produce impressive-looking noise.
+- **Dataset size — the binding constraint.** 5 snapshots, 4 adjacent
+  pairs, one genuine single-session move. No model conclusion is possible;
+  nothing that needs history (PCA, walk-forward validation, regime
+  detection, drift monitoring, ensembles) is implemented, on purpose —
+  with this much data it would produce impressive-looking noise. See
+  [§13](#13-what-more-data-would-unlock).
 - **Data accumulation stalled 2026-08-16 → 2026-09-07.** Local cron
   failed silently (Postgres container down); GitHub Actions ran but wrote
   to an ephemeral DB (no `DATABASE_URL` secret). Both are fixed/guarded
   now, but the lost month is lost.
-- **Non-consecutive pairs.** The 3 existing pairs span 3, 36 and 22
-  calendar days. The evaluation flags every multi-day gap; a 36-day
-  "persistence" step is not a next-session forecast.
+- **Non-consecutive pairs and non-trading-day captures.** The 4 pairs
+  span 3, 36, 22 and 1 calendar days. Three of the five snapshots were
+  captured on a weekend or holiday (ET) and hold the prior Friday's close,
+  so the only clean next-session pair is #75→#315. The evaluation flags
+  every multi-day gap and lists the weekend captures; `calendar_gap_days`
+  is measured between capture timestamps, not trading sessions.
 - **European BS on American options** — accepted, uncorrected.
 - **Flat `r`, continuous trailing `q`, spot (not forward) moneyness** —
   see §5 / `docs/IV_AND_COORDINATES.md`.
@@ -389,3 +429,44 @@ cd ../frontend && npm install && npm run dev   # http://localhost:3000
 - **Model is retrained inside the evaluation**, not loaded from a
   registry — fine at this scale, not a pattern to keep once training
   costs anything.
+
+---
+
+## 13. What more data would unlock
+
+None of this is implemented — with 5 snapshots each item would add
+precision it hasn't earned. It is the intended order of work once the
+daily capture has run unbroken for a few months.
+
+- **Walk-forward, expanding-window evaluation.** Replace LOPO with a
+  causal split: train on pairs 1..k, test on pair k+1, step forward. A
+  random split leaks — adjacent surfaces are ~0.99 autocorrelated, so a
+  shuffled test pair is almost in the training set. Report the
+  distribution of per-step (model − persistence) loss differentials, not
+  just a pooled number, and run a sign test / Diebold-Mariano on it.
+- **A statistical baseline between persistence and the net.** EWMA or
+  AR(1) on ATM total variance, and a random-walk-with-drift on the first
+  two or three surface PCs. If the neural model can't beat *these* it has
+  no reason to exist; persistence alone is too low a bar to be
+  interesting.
+- **Arbitrage-aware construction.** Move surface fitting into
+  total-variance space with calendar monotonicity (`w(k, T)` ↑ in `T`)
+  and butterfly convexity enforced — SVI per slice with SSVI-style
+  constraints — instead of separable PCHIP. Then the ~60% extrapolated
+  wing can be a constrained fit rather than a flat clamp, and a
+  no-arbitrage penalty can be added to the model loss.
+- **Factor structure.** Once ~50+ observation days exist (roughly 5–10×
+  the retained factor count), a PCA on the grid gives 3–4 stable
+  factors — level, skew, curvature, term slope — and the forecasting
+  problem shrinks to predicting a handful of factor scores, which is both
+  more tractable and more interpretable than a 1600-cell map.
+- **Regime stratification.** Bucket pairs by a VIX (or realised-vol)
+  regime and check whether any model edge is uniform or comes entirely
+  from one calm stretch. The current sample is a single low-vol summer.
+- **Cheaper cuts at the inputs.** An intraday snapshot (e.g. 15:45 ET) to
+  escape the widest, stalest end-of-day spreads; a short-rate curve
+  bootstrapped from the bill/note ladder instead of one 13-week scalar;
+  forward log-moneyness `ln(K/F_T)` as the stored coordinate so each
+  smile's ATM point sits exactly at the forward. Each is a small,
+  well-understood change deferred only because the dataset is the
+  bottleneck.

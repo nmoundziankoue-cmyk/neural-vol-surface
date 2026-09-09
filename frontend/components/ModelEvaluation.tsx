@@ -37,9 +37,9 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-        <Stat label="Paires (J → J+1)" value={String(e.n_pairs ?? "—")} />
-        <Stat label="RMSE persistence" value={fmt(e.persistence_rmse)} />
-        <Stat label="RMSE modèle (LOPO)" value={fmt(e.model_rmse)} />
+        <Stat label="Paires adjacentes" value={String(e.n_pairs ?? "—")} />
+        <Stat label="RMSE persistence (poolée)" value={fmt(e.persistence_rmse)} />
+        <Stat label="RMSE modèle (LOPO, poolée)" value={fmt(e.model_rmse)} />
         <Stat
           label="Amélioration relative"
           value={pct(e.relative_improvement)}
@@ -60,8 +60,10 @@ export default function ModelEvaluation({ evaluation }: { evaluation: Evaluation
           <table className="text-xs border-collapse">
             <thead>
               <tr className="text-neutral-400 text-left border-b border-neutral-700">
-                <th className="py-1.5 pr-4">Paire</th>
-                <th className="py-1.5 pr-4">Écart</th>
+                <th className="py-1.5 pr-4">Paire (dates ET)</th>
+                <th className="py-1.5 pr-4" title="jours calendaires entre les deux instants de capture — pas le nombre de séances">
+                  Écart
+                </th>
                 <th className="py-1.5 pr-4">Cellules notées</th>
                 <th className="py-1.5 pr-4">RMSE persistence</th>
                 <th className="py-1.5 pr-4">RMSE modèle</th>

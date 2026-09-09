@@ -1,8 +1,8 @@
 {
   "ticker": "SPY",
-  "generated_on": "2026-09-08",
-  "n_snapshots": 4,
-  "n_pairs": 3,
+  "generated_on": "2026-09-09",
+  "n_snapshots": 5,
+  "n_pairs": 4,
   "grid": "40x40 (TTE x log-moneyness)",
   "pairs": [
     {
@@ -13,8 +13,8 @@
       "calendar_gap_days": 3,
       "is_next_trading_day": true,
       "n_cells_scored": 925,
-      "persistence_rmse": 0.005706446245312691,
-      "model_rmse": 0.016653524711728096
+      "persistence_rmse": 0.005704852752387524,
+      "model_rmse": 0.01637655682861805
     },
     {
       "snapshot_id_t": 23,
@@ -24,8 +24,8 @@
       "calendar_gap_days": 36,
       "is_next_trading_day": false,
       "n_cells_scored": 993,
-      "persistence_rmse": 0.01798878237605095,
-      "model_rmse": 0.01794167049229145
+      "persistence_rmse": 0.018358154222369194,
+      "model_rmse": 0.01945098303258419
     },
     {
       "snapshot_id_t": 54,
@@ -34,20 +34,32 @@
       "date_t1": "2026-09-07",
       "calendar_gap_days": 22,
       "is_next_trading_day": false,
-      "n_cells_scored": 958,
-      "persistence_rmse": 0.013324220664799213,
-      "model_rmse": 0.034920379519462585
+      "n_cells_scored": 948,
+      "persistence_rmse": 0.01248802337795496,
+      "model_rmse": 0.015181904658675194
+    },
+    {
+      "snapshot_id_t": 75,
+      "snapshot_id_t1": 315,
+      "date_t": "2026-09-07",
+      "date_t1": "2026-09-08",
+      "calendar_gap_days": 1,
+      "is_next_trading_day": true,
+      "n_cells_scored": 963,
+      "persistence_rmse": 0.012260346673429012,
+      "model_rmse": 0.02627377025783062
     }
   ],
-  "persistence_rmse": 0.013466213829815388,
-  "model_rmse": 0.024628013372421265,
-  "relative_improvement": -0.8288743728317062,
+  "persistence_rmse": 0.013102672062814236,
+  "model_rmse": 0.019839022308588028,
+  "relative_improvement": -0.5141203422843612,
   "model_beats_persistence": false,
   "statistically_significant": false,
   "caveats": [
-    "Only 3 pair(s); need >= 20 next-trading-day pairs before any RMSE comparison is more than anecdote.",
+    "Only 4 pair(s); need >= 20 next-trading-day pairs before any RMSE comparison is more than anecdote.",
     "Some pairs span multi-day gaps, so persistence is being asked to hold over a weekend+ rather than one session: 2026-07-11->2026-08-16 (36d), 2026-08-16->2026-09-07 (22d)",
-    "Model RMSE is leave-one-pair-out cross-validated, but with 3 pair(s) each fold trains on only 2 pair(s) - the number is out-of-sample but has enormous variance and should not be read as a point estimate."
+    "Model RMSE is leave-one-pair-out cross-validated, but with 4 pair(s) each fold trains on only 3 pair(s) - the number is out-of-sample but has enormous variance and should not be read as a point estimate. Adjacent pairs also share a snapshot (pair i's t+1 is pair i+1's t), so the folds are not fully independent.",
+    "Weekend captures (ET), which carry the prior session's close: #23 (2026-07-11, Sat), #54 (2026-08-16, Sun). calendar_gap_days spans capture timestamps, not trading sessions, so is_next_trading_day can be True for a pair whose market content spans two or more sessions. Exchange holidays are not detected here and have the same effect."
   ],
-  "verdict": "On 3 pair(s), the model does not beat persistence (model masked RMSE 0.0246 vs persistence 0.0135, relative improvement -82.9%). This is NOT statistically meaningful: too few pairs, some spanning multi-day gaps, and each cross-validation fold trains on almost nothing. Treat it as a pipeline smoke test, not evidence about the model either way."
+  "verdict": "On 4 pair(s), the model does not beat persistence (model masked RMSE 0.0198 vs persistence 0.0131, relative improvement -51.4%). This is NOT statistically meaningful: too few pairs, some spanning multi-day gaps, and each cross-validation fold trains on almost nothing. Treat it as a pipeline smoke test, not evidence about the model either way."
 }

@@ -1,5 +1,7 @@
-"""Builds (surface_day_J, surface_day_J+1) training pairs from consecutive
-Postgres snapshots.
+"""Builds (surface_day_J, surface_day_J+1) training pairs from
+chronologically adjacent Postgres snapshots (adjacent in capture order,
+which is not necessarily consecutive trading days - see evaluate.py for
+how multi-day gaps are flagged).
 
 Each snapshot's own log-moneyness/TTE grid bounds are data-derived
 (available strikes/expiries shift day to day), so simply flattening each
@@ -23,7 +25,7 @@ from app.db.models import Snapshot, VolPoint
 from app.db.session import SessionLocal
 from app.vol.surface_builder import build_vol_surface
 
-MIN_SNAPSHOTS_REQUIRED = 2  # need >= 2 consecutive days to form one (J, J+1) pair
+MIN_SNAPSHOTS_REQUIRED = 2  # need >= 2 snapshots on different days to form one (J, J+1) pair
 
 
 class InsufficientSnapshotsError(Exception):

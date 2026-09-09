@@ -13,6 +13,13 @@ import type { DataQualityRow } from "@/lib/types";
 const pct = (x: number | null) => (x == null ? "—" : `${(x * 100).toFixed(1)}%`);
 const num = (x: number | null) => (x == null ? "—" : x.toLocaleString());
 
+// ET trading date, so this column matches the evaluation panel (which
+// keys every pair on the America/New_York capture date). Formatting the
+// UTC ISO string directly would put weekend/holiday captures on the
+// wrong calendar day.
+const etDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
 export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
   if (rows.length === 0) {
     return <p className="text-neutral-400">Aucun rapport de qualité de données pour le moment.</p>;
@@ -26,7 +33,7 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
         <thead>
           <tr className="text-neutral-400 text-left border-b border-neutral-700">
             <th className="py-2 pr-4">Snapshot</th>
-            <th className="py-2 pr-4">Date</th>
+            <th className="py-2 pr-4" title="date de séance en heure de New York (ET)">Date (ET)</th>
             <th className="py-2 pr-4">Spot</th>
             <th className="py-2 pr-4">Contrats bruts</th>
             <th className="py-2 pr-4">IV valides</th>
@@ -59,7 +66,7 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
                   #{r.snapshot_id}
                   {r.backfilled && <span className="text-amber-500" title="rétro-rempli : chaîne brute indisponible"> *</span>}
                 </td>
-                <td className="py-1.5 pr-4">{new Date(r.captured_at).toISOString().slice(0, 10)}</td>
+                <td className="py-1.5 pr-4">{etDate(r.captured_at)}</td>
                 <td className="py-1.5 pr-4">{r.spot.toFixed(2)}</td>
                 <td className="py-1.5 pr-4">{num(r.n_contracts_raw)}</td>
                 <td className="py-1.5 pr-4">{num(r.n_kept)}</td>
