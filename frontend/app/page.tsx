@@ -28,17 +28,21 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [surface, setSurface] = useState<VolSurfaceResponse | null>(null);
   const [dataQuality, setDataQuality] = useState<DataQualityRow[]>([]);
+  const [dqLoaded, setDqLoaded] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResponse | null>(null);
+  const [evalLoaded, setEvalLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchDataQuality()
       .then(setDataQuality)
-      .catch(() => setDataQuality([]));
+      .catch(() => setDataQuality([]))
+      .finally(() => setDqLoaded(true));
     fetchEvaluation()
       .then(setEvaluation)
-      .catch(() => setEvaluation(null));
+      .catch(() => setEvaluation(null))
+      .finally(() => setEvalLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -65,8 +69,11 @@ export default function Home() {
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6">
       <h1 className="text-2xl font-semibold mb-4">Neural Volatility Surface — SPY</h1>
 
-      {!snapshotsLoaded && !error && (
-        <p className="text-neutral-400 mb-4">Loading snapshots…</p>
+      {(!snapshotsLoaded || !dqLoaded || !evalLoaded) && !error && (
+        <p className="text-neutral-400 mb-4">
+          Loading… the API runs on a free tier and sleeps after ~15 min idle, so the
+          first load can take 30–60&nbsp;s while the backend and database wake up.
+        </p>
       )}
 
       {snapshotsLoaded && snapshots.length === 0 && !error && (
@@ -123,7 +130,11 @@ export default function Home() {
           on every backend deploy; the database may hold captures more recent than the
           last recompute.
         </p>
-        <ModelEvaluation evaluation={evaluation} />
+        {evalLoaded ? (
+          <ModelEvaluation evaluation={evaluation} />
+        ) : (
+          <p className="text-neutral-500 text-sm">Loading evaluation…</p>
+        )}
       </section>
 
       <section className="mt-10">
@@ -133,7 +144,11 @@ export default function Home() {
           and the Black-Scholes inversion, why the rest is dropped, and how much of the
           reconstructed surface is real vs clamp-extrapolated.
         </p>
-        <DataQualityTable rows={dataQuality} />
+        {dqLoaded ? (
+          <DataQualityTable rows={dataQuality} />
+        ) : (
+          <p className="text-neutral-500 text-sm">Loading data-quality report…</p>
+        )}
       </section>
     </main>
   );
