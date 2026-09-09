@@ -5,7 +5,11 @@ import type {
   VolSurfaceResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
+// Trailing slash stripped so a NEXT_PUBLIC_API_BASE set with one (e.g.
+// "https://host/") doesn't produce "//api/..." paths, which the backend 404s.
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
 
 export async function fetchSnapshots(): Promise<SnapshotSummary[]> {
   const res = await fetch(`${API_BASE}/api/snapshots`, { cache: "no-store" });
