@@ -20,12 +20,25 @@ const num = (x: number | null) => (x == null ? "—" : x.toLocaleString());
 const etDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
+// Short ET weekday (Sat/Sun get flagged: a capture on a non-trading day
+// holds the prior session's close - see the evaluation panel caveats).
+const etWeekday = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+const isWeekendET = (iso: string) => {
+  const d = etWeekday(iso);
+  return d === "Sat" || d === "Sun";
+};
+
 export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
   if (rows.length === 0) {
     return <p className="text-neutral-400">Aucun rapport de qualité de données pour le moment.</p>;
   }
 
   const anyBackfilled = rows.some((r) => r.backfilled);
+  const anyWeekend = rows.some((r) => isWeekendET(r.captured_at));
 
   return (
     <div className="overflow-x-auto">
@@ -66,7 +79,18 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
                   #{r.snapshot_id}
                   {r.backfilled && <span className="text-amber-500" title="rétro-rempli : chaîne brute indisponible"> *</span>}
                 </td>
-                <td className="py-1.5 pr-4">{etDate(r.captured_at)}</td>
+                <td className="py-1.5 pr-4 whitespace-nowrap">
+                  {etDate(r.captured_at)}{" "}
+                  <span className="text-neutral-500">({etWeekday(r.captured_at)})</span>
+                  {isWeekendET(r.captured_at) && (
+                    <span
+                      className="text-amber-500"
+                      title="capturé un jour non ouvré (ET) : contient la clôture du vendredi précédent"
+                    >
+                      {" "}⚠
+                    </span>
+                  )}
+                </td>
                 <td className="py-1.5 pr-4">{r.spot.toFixed(2)}</td>
                 <td className="py-1.5 pr-4">{num(r.n_contracts_raw)}</td>
                 <td className="py-1.5 pr-4">{num(r.n_kept)}</td>
@@ -100,6 +124,14 @@ export default function DataQualityTable({ rows }: { rows: DataQualityRow[] }) {
           <span className="text-amber-500">*</span> rétro-rempli : capturé avant l&apos;instrumentation
           data-quality, la chaîne brute n&apos;est plus disponible — seules les métriques dérivées des
           points stockés sont renseignées.
+        </p>
+      )}
+      {anyWeekend && (
+        <p className="text-neutral-500 mt-2">
+          <span className="text-amber-500">⚠</span> capturé un samedi/dimanche (ET) : la capture
+          quotidienne a tourné hors séance, la chaîne d&apos;options reflète donc la clôture du
+          vendredi précédent. Les jours fériés produisent le même effet mais ne sont pas détectés
+          ici. Voir aussi les caveats du panneau « Modèle vs persistence ».
         </p>
       )}
     </div>
